@@ -10,6 +10,8 @@ import os
 import argparse
 import configparser
 import time
+import subprocess
+from termcolor import colored
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 STREAM = True
@@ -95,7 +97,7 @@ def initialize_openai_api():
 
 
 
-def create_input_prompt(file_to_execute, length=3000):
+def create_input_prompt(main_file, length=3000):
     input_prompt = PROMPT_BEGINNING
     # Read the readme file.
     with open('README.md', 'r') as f:
@@ -103,7 +105,7 @@ def create_input_prompt(file_to_execute, length=3000):
 
     # Add the readme text to the input prompt.
     input_prompt = input_prompt + readme_text
-    input_prompt += f'============================================================\n**{file_to_execute}:**'
+    input_prompt += f'============================================================\n**{main_file}:**'
     # input_prompt += '============================================================\n**'
     return input_prompt
 
@@ -116,8 +118,8 @@ def generate_completion(input_prompt, num_tokens):
 
 def clear_screen_and_display_generated_files(response):
     # Clear screen.
-    os.system('cls' if os.name == 'nt' else 'clear')
-    generated_text = '**'
+    # os.system('cls' if os.name == 'nt' else 'clear')
+    generated_text = ''
     while True:
         next_response = next(response)
         completion = next_response['choices'][0]['text']
@@ -160,28 +162,69 @@ def save_files(files):
             with open(file_path, 'w') as f:
                 f.write(file_text)
 
+    return dir_name
+
 
 def get_args():
     # Get the number of tokens as positional argument.
     parser = argparse.ArgumentParser()
-    parser.add_argument("file_to_execute", help="The file to execute")
-    # arguments for the file
-    parser.add_argument("arguments", nargs='*', help="Arguments to pass to the file")
-    parser.add_argument("--tokens", type=int, default=256)
+    parser.add_argument("main_file", help="The file to execute")
+    parser.add_argument("command", nargs='*', help="The command to execute")
+    parser.add_argument("--tokens", type=int, default=1000)
+    parser.add_argument("--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
     args = parser.parse_args()
     return args
+
+
+def get_output(program):
+    stderr = None
+    stdout = None
+    success = False
+
+    # Run the program and capture its output
+    with open(os.devnull, 'w') as devnull:
+        try:
+            # Get the stderr and the stdout of the program program.
+            stdout = subprocess.check_output(program,  stderr=subprocess.STDOUT, shell=True).decode('utf-8')
+            success = True
+        except subprocess.CalledProcessError as e:
+            stderr =  e.output.decode('utf-8')
+
+    return stdout, stderr, success
+
 
 if __name__ == '__main__':
     args = get_args()
     initialize_openai_api()
-    input_prompt = create_input_prompt(args.file_to_execute)
-    # print("input_prompt:", input_prompt)
-    # sys.exit(0)
-    response = generate_completion(input_prompt, args.tokens)
-    generated_text = clear_screen_and_display_generated_files(response)
-    text_all = input_prompt + '\n' + generated_text
-    files = split_text_into_files(text_all)
-    save_files(files)
+    input_prompt = create_input_prompt(args.main_file)
+    for attempt in range(1, args.num_attempts + 1):
+        block_char = '─'
+        print(f'{block_char * 30}', end='')
+        # print the attempt in bold
+        print("\033[1m Attempt: " + str(attempt) + "\033[0m")
+
+        response = generate_completion(input_prompt, args.tokens)
+        generated_text = clear_screen_and_display_generated_files(response)
+        text_all = input_prompt + '\n' + generated_text
+        files = split_text_into_files(text_all)
+        dir_name = save_files(files)
+        command_inside_docker = ' '.join(args.command)
+        command_with_docker = f'docker run -it -v $PWD:/mounted cofix_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
+
+        output, stderr, success = get_output(command_with_docker)
+        print()
+        # print the stderr in red.
+        if stderr:
+            print(colored(stderr, 'red'))
+        # print the output in green.
+        if output:
+            print(colored(output, 'green'))
+
+        print("success:", success)
+        if success:
+            break
+
+    print('\n\n\n\n\n\nFailed to generate code.')
 
 
   
