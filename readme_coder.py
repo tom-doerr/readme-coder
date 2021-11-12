@@ -12,6 +12,9 @@ import configparser
 import time
 import subprocess
 from termcolor import colored
+import random
+import string
+
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 STREAM = True
@@ -22,6 +25,8 @@ CONFIG_DIR = os.getenv('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
 API_KEYS_LOCATION = os.path.join(CONFIG_DIR, 'openaiapirc')
 
 GENERATED_PROJECTS_DIR = 'generated_projects'
+SUCCESS_LINKS_DIR = 'success_links'
+SUCCESS_LINKS_ALL_DIR = os.path.join(SUCCESS_LINKS_DIR, 'all')
 
 PROMPT_BEGINNING = \
 '''
@@ -39,25 +44,13 @@ venv/
 
 MIT License
 
-Copyright (c) 2018 Ondřej Masopust; Gymnázium Praha 6, Nad Alejí 1952
+Copyright <YEAR> <COPYRIGHT HOLDER>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ============================================================
 **README.md:**
@@ -131,6 +124,20 @@ def clear_screen_and_display_generated_files(response):
 
     return generated_text
 
+def clear_screen_and_display_generated_files_with_animation(response):
+    generated_text = ''
+    while True:
+        next_response = next(response)
+        completion = next_response['choices'][0]['text']
+        for e in completion:
+            print(e, end='', flush=True)
+            time.sleep(0.005)
+
+        generated_text = generated_text + completion
+        if next_response['choices'][0]['finish_reason'] != None: break
+
+    return generated_text
+
 def split_text_into_files(text):
     # Split text into files.
     files = {}
@@ -157,10 +164,15 @@ def save_files(files):
         if file_name and file_name not in FILES_NOT_TO_INCLUDE:
             file_path = dir_name + '/' + file_name
             # Create directories if needed.
-            if '/' in file_name:
-                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'w') as f:
-                f.write(file_text)
+            try:
+                if '/' in file_name:
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                with open(file_path, 'w') as f:
+                    f.write(file_text)
+            except FileExistsError:
+                print('File already exists: {}'.format(file_path))
+                print('Skipping file...')
+                continue
 
     return dir_name
 
@@ -171,7 +183,10 @@ def get_args():
     parser.add_argument("main_file", help="The file to execute")
     parser.add_argument("command", nargs='*', help="The command to execute")
     parser.add_argument("--tokens", type=int, default=1000)
-    parser.add_argument("--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
+    parser.add_argument('-a', "--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
+    parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
+    parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
+    parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     args = parser.parse_args()
     return args
 
@@ -192,11 +207,44 @@ def get_output(program):
 
     return stdout, stderr, success
 
+def get_output_timeout(program, timeout):
+    stderr = None
+    stdout = None
+    success = False
+
+    # Run the program and capture its output
+    with open(os.devnull, 'w') as devnull:
+        try:
+            # Get the stderr and the stdout of the program program.
+            stdout = subprocess.check_output(program,  stderr=subprocess.STDOUT, shell=True, timeout=timeout).decode('utf-8')
+            success = True
+        except subprocess.TimeoutExpired:
+            stderr =  "Timeout"
+        except subprocess.CalledProcessError as e:
+            stderr =  e.output.decode('utf-8')
+
+    return stdout, stderr, success
+
+def generate_success_id():
+    # generate a random success id consisting of letters
+    while True:
+        suc_id = ''.join(random.choices(string.ascii_letters, k=5))
+        # check if the id exists
+        if not os.path.exists(os.path.join(SUCCESS_LINKS_DIR, suc_id)):
+            break
+
+    return suc_id
+
+def write_output_suc_id_file(output, suc_id):
+    # write the output to a file
+    with open(os.path.join(SUCCESS_LINKS_DIR, f'{suc_id}.txt'), 'w') as f:
+        f.write(output)
 
 if __name__ == '__main__':
     args = get_args()
     initialize_openai_api()
     input_prompt = create_input_prompt(args.main_file)
+    num_solutions = 0
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
@@ -204,27 +252,50 @@ if __name__ == '__main__':
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
 
         response = generate_completion(input_prompt, args.tokens)
-        generated_text = clear_screen_and_display_generated_files(response)
+        # generated_text = clear_screen_and_display_generated_files(response)
+        generated_text = clear_screen_and_display_generated_files_with_animation(response)
         text_all = input_prompt + '\n' + generated_text
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
         command_inside_docker = ' '.join(args.command)
         command_with_docker = f'docker run -it -v $PWD:/mounted cofix_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
 
-        output, stderr, success = get_output(command_with_docker)
+        # output, stderr, success = get_output(command_with_docker)
+        output, stderr, success = get_output_timeout(command_with_docker, args.timeout)
         print()
         # print the stderr in red.
         if stderr:
             print(colored(stderr, 'red'))
+            # os.system('cls' if os.name == 'nt' else 'clear')
         # print the output in green.
         if output:
             print(colored(output, 'green'))
 
         print("success:", success)
         if success:
-            break
+            if args.output:
+                if output.strip() != args.output.strip():
+                    print(colored('Output doesn\'t match expected output', 'red'))
+                    print(colored(f'Expected: {args.output.strip()}', 'red'))
+                    print(colored(f'Got: {output.strip()}', 'red'))
+                    continue
 
-    print('\n\n\n\n\n\nFailed to generate code.')
+            print(colored("\n\n\nSuccess!", 'green'))
+            suc_id = generate_success_id()
+            # Create synlink to dir_name
+            os.makedirs(SUCCESS_LINKS_ALL_DIR, exist_ok=True)
+            os.symlink(os.path.join('../..', dir_name), os.path.join(SUCCESS_LINKS_ALL_DIR, str(time.time())))
+            os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, suc_id))
+            write_output_suc_id_file(output, suc_id)
+            # overwrite success_latest link
+            if os.path.exists(os.path.join(SUCCESS_LINKS_DIR, 'success_latest')):
+                os.remove(os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
+            os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
+            num_solutions += 1
+            if num_solutions >= args.num_solutons:
+                sys.exit(0)
+
+    print(colored('\n\n\n\Failed to generate {args.num_solutions}.', 'red'))
 
 
   
