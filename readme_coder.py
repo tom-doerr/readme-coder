@@ -95,7 +95,7 @@ def initialize_openai_api():
 
 
 
-def create_input_prompt(length=3000):
+def create_input_prompt(file_to_execute, length=3000):
     input_prompt = PROMPT_BEGINNING
     # Read the readme file.
     with open('README.md', 'r') as f:
@@ -103,7 +103,8 @@ def create_input_prompt(length=3000):
 
     # Add the readme text to the input prompt.
     input_prompt = input_prompt + readme_text
-    input_prompt += '============================================================\n**'
+    input_prompt += f'============================================================\n**{file_to_execute}:**'
+    # input_prompt += '============================================================\n**'
     return input_prompt
 
 
@@ -128,24 +129,30 @@ def clear_screen_and_display_generated_files(response):
 
     return generated_text
 
-def split_text_into_files(generated_text):
+def split_text_into_files(text):
     # Split text into files.
     files = {}
-    items = generated_text.split('============================================================')
+    items = text.split('============================================================')
     items = [items.strip() for items in items]
     for item in items:
+        # print("item:", item)
+        # print("item.startswith('**'):", item.startswith('**'))
         if item.startswith('**'):
             file_name = item.split('**')[1].split(':')[0].strip()
-            files[file_name] = item.split(':')[1].strip()
+            # print("file_name:", file_name)
+            # input()
+            files[file_name] = '**'.join(item.split('**')[2:]).strip()
 
     return files
 
 def save_files(files):
     # Save files to disk.
     dir_name = os.path.join(GENERATED_PROJECTS_DIR, str(time.time()))
+    # make all dirs
+    os.makedirs(dir_name)
     # os.mkdir(dir_name)
     for file_name, file_text in files.items():
-        if file_name not in FILES_NOT_TO_INCLUDE:
+        if file_name and file_name not in FILES_NOT_TO_INCLUDE:
             file_path = dir_name + '/' + file_name
             # Create directories if needed.
             if '/' in file_name:
@@ -157,6 +164,9 @@ def save_files(files):
 def get_args():
     # Get the number of tokens as positional argument.
     parser = argparse.ArgumentParser()
+    parser.add_argument("file_to_execute", help="The file to execute")
+    # arguments for the file
+    parser.add_argument("arguments", nargs='*', help="Arguments to pass to the file")
     parser.add_argument("--tokens", type=int, default=256)
     args = parser.parse_args()
     return args
@@ -164,13 +174,13 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
     initialize_openai_api()
-    input_prompt = create_input_prompt()
+    input_prompt = create_input_prompt(args.file_to_execute)
     # print("input_prompt:", input_prompt)
     # sys.exit(0)
     response = generate_completion(input_prompt, args.tokens)
     generated_text = clear_screen_and_display_generated_files(response)
-    files = split_text_into_files(generated_text)
-    print("files:", files)
+    text_all = input_prompt + '\n' + generated_text
+    files = split_text_into_files(text_all)
     save_files(files)
 
 
