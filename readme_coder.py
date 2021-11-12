@@ -173,6 +173,10 @@ def save_files(files):
                 print('File already exists: {}'.format(file_path))
                 print('Skipping file...')
                 continue
+            except IsADirectoryError:
+                print('File is a directory: {}'.format(file_path))
+                print('Skipping file...')
+                continue
 
     return dir_name
 
@@ -182,7 +186,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("main_file", help="The file to execute")
     parser.add_argument("command", nargs='*', help="The command to execute")
-    parser.add_argument("--tokens", type=int, default=1000)
+    parser.add_argument('-n', "--num_tokens", type=int, default=1000)
     parser.add_argument('-a', "--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
     parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
@@ -251,7 +255,7 @@ if __name__ == '__main__':
         # print the attempt in bold
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
 
-        response = generate_completion(input_prompt, args.tokens)
+        response = generate_completion(input_prompt, args.num_tokens)
         # generated_text = clear_screen_and_display_generated_files(response)
         generated_text = clear_screen_and_display_generated_files_with_animation(response)
         text_all = input_prompt + '\n' + generated_text
@@ -278,6 +282,10 @@ if __name__ == '__main__':
                     print(colored('Output doesn\'t match expected output', 'red'))
                     print(colored(f'Expected: {args.output.strip()}', 'red'))
                     print(colored(f'Got: {output.strip()}', 'red'))
+                    continue
+
+                if output.strip() == '':
+                    print(colored('Output is empty', 'red'))
                     continue
 
             print(colored("\n\n\nSuccess!", 'green'))
