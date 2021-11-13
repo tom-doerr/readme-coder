@@ -191,6 +191,7 @@ def get_args():
     parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
+    parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
     args = parser.parse_args()
     return args
 
@@ -302,6 +303,13 @@ if __name__ == '__main__':
             num_solutions += 1
             if num_solutions >= args.num_solutons:
                 sys.exit(0)
+
+        if args.wait > 0:
+            print(f'Waiting {args.wait} seconds before next attempt')
+            # count down
+            for i in range(args.wait, 0, -1):
+                print(f'  {i} s left', end='\r')
+                time.sleep(1)
 
     print(colored('\n\n\n\Failed to generate {args.num_solutions}.', 'red'))
 
