@@ -285,9 +285,10 @@ if __name__ == '__main__':
                     print(colored(f'Got: {output.strip()}', 'red'))
                     continue
 
-                if output.strip() == '':
-                    print(colored('Output is empty', 'red'))
-                    continue
+            # check if output is empty
+            if not output.strip():
+                print(colored('Output is empty', 'red'))
+                continue
 
             print(colored("\n\n\nSuccess!", 'green'))
             suc_id = generate_success_id()
