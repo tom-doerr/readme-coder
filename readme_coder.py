@@ -233,7 +233,7 @@ def get_output_timeout(program, timeout):
 def generate_success_id():
     # generate a random success id consisting of letters
     while True:
-        suc_id = ''.join(random.choices(string.ascii_letters, k=5))
+        suc_id = ''.join(random.choices(string.ascii_letters, k=5)).lower()
         # check if the id exists
         if not os.path.exists(os.path.join(SUCCESS_LINKS_DIR, suc_id)):
             break
