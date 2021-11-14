@@ -265,7 +265,7 @@ if __name__ == '__main__':
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
         command_inside_docker = ' '.join(args.command)
-        command_with_docker = f'docker run --rm -it -v $PWD:/mounted cofix_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
+        command_with_docker = f'docker run --ulimit nofile=10000:10000 --rm -it -v $PWD:/mounted cofix_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
 
         # output, stderr, success = get_output(command_with_docker)
         output, stderr, success = get_output_timeout(command_with_docker, args.timeout)
