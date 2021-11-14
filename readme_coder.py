@@ -103,8 +103,8 @@ def create_input_prompt(main_file, length=3000):
     return input_prompt
 
 
-def generate_completion(input_prompt, num_tokens):
-    response = openai.Completion.create(engine='davinci-codex', prompt=input_prompt, temperature=0.5, max_tokens=num_tokens, stream=STREAM, stop=None)
+def generate_completion(input_prompt, num_tokens, model):
+    response = openai.Completion.create(engine=model, prompt=input_prompt, temperature=0.5, max_tokens=num_tokens, stream=STREAM, stop=None)
     return response
 
 
@@ -131,7 +131,7 @@ def clear_screen_and_display_generated_files_with_animation(response):
         completion = next_response['choices'][0]['text']
         for e in completion:
             print(e, end='', flush=True)
-            time.sleep(0.005)
+            time.sleep(0.001)
 
         generated_text = generated_text + completion
         if next_response['choices'][0]['finish_reason'] != None: break
@@ -192,6 +192,7 @@ def get_args():
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
+    parser.add_argument('-m', '--model', type=str, default='cushman-codex', help='The model to use')
     args = parser.parse_args()
     return args
 
@@ -256,7 +257,7 @@ if __name__ == '__main__':
         # print the attempt in bold
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
 
-        response = generate_completion(input_prompt, args.num_tokens)
+        response = generate_completion(input_prompt, args.num_tokens, args.model)
         # generated_text = clear_screen_and_display_generated_files(response)
         generated_text = clear_screen_and_display_generated_files_with_animation(response)
         text_all = input_prompt + '\n' + generated_text
