@@ -168,7 +168,7 @@ def save_files(files):
                 if '/' in file_name:
                     os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, 'w') as f:
-                    f.write(file_text)
+                    f.write(file_text + '\n')
             except FileExistsError:
                 print('File already exists: {}'.format(file_path))
                 print('Skipping file...')
