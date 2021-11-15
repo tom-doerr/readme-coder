@@ -131,7 +131,7 @@ def clear_screen_and_display_generated_files(response):
 
     return generated_text
 
-def clear_screen_and_display_generated_files_with_animation(response):
+def clear_screen_and_display_generated_files_with_animation(response, print_delay=0.001):
     generated_text = ''
     while True:
         next_response = next(response)
@@ -140,7 +140,7 @@ def clear_screen_and_display_generated_files_with_animation(response):
         completion = next_response['choices'][0]['text']
         for e in completion:
             print(e, end='', flush=True)
-            time.sleep(0.001)
+            time.sleep(print_delay)
 
         generated_text = generated_text + completion
         if next_response['choices'][0]['finish_reason'] != None: break
@@ -279,8 +279,9 @@ if __name__ == '__main__':
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
 
         response = generate_completion(input_prompt, args.num_tokens, args.model)
+        print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
         # generated_text = clear_screen_and_display_generated_files(response)
-        generated_text = clear_screen_and_display_generated_files_with_animation(response)
+        generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
         text_all = input_prompt + '\n' + generated_text
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
