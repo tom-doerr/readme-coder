@@ -14,7 +14,7 @@ import subprocess
 from termcolor import colored
 import random
 import string
-
+from pathlib import Path
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 STREAM = True
@@ -167,7 +167,13 @@ def save_files(files):
             try:
                 if '/' in file_name:
                     dirname = os.path.dirname(file_path)
-                    dirname.mkdir(parents=True, exist_ok=True)
+                    dirname_path = Path(dirname)
+                    try:
+                        dirname_path.mkdir(parents=True, exist_ok=True)
+                    except NotADirectoryError:
+                        print('Not a directory: {}'.format(dirname))
+                        print('Skipping file: {}'.format(file_name))
+                        continue
                     # os.makedirs(dirname, exist_ok=True)    r
                 with open(file_path, 'w') as f:
                     f.write(file_text + '\n')
