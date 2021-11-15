@@ -104,7 +104,11 @@ def create_input_prompt(main_file, length=3000):
 
 
 def generate_completion(input_prompt, num_tokens, model):
-    response = openai.Completion.create(engine=model, prompt=input_prompt, temperature=0.5, max_tokens=num_tokens, stream=STREAM, stop=None)
+    args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': STREAM, 'stop': None, 'logprobs': 1}
+    response = openai.Completion.create(**args)
+    # save args to file
+    with open('args.csv', 'a') as f:
+        f.write(f'{time.time()}, {args}\n')
     return response
 
 
@@ -115,6 +119,9 @@ def clear_screen_and_display_generated_files(response):
     generated_text = ''
     while True:
         next_response = next(response)
+        # write response to file
+        with open('responses.csv', 'a') as f:
+            f.write(f'{time.time()}, {next_response}\n')
         completion = next_response['choices'][0]['text']
         # print("completion:", completion)
         # print(next(response))
@@ -128,6 +135,8 @@ def clear_screen_and_display_generated_files_with_animation(response):
     generated_text = ''
     while True:
         next_response = next(response)
+        with open('responses.csv', 'a') as f:
+            f.write(f'{time.time()}, {next_response}\n')
         completion = next_response['choices'][0]['text']
         for e in completion:
             print(e, end='', flush=True)
@@ -183,6 +192,10 @@ def save_files(files):
                 continue
             except IsADirectoryError:
                 print('File is a directory: {}'.format(file_path))
+                print('Skipping file...')
+                continue
+            except OSError:
+                print('OSError: {}'.format(file_path))
                 print('Skipping file...')
                 continue
 
