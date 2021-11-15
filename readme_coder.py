@@ -112,25 +112,6 @@ def generate_completion(input_prompt, num_tokens, model):
     return response
 
 
-
-def clear_screen_and_display_generated_files(response):
-    # Clear screen.
-    # os.system('cls' if os.name == 'nt' else 'clear')
-    generated_text = ''
-    while True:
-        next_response = next(response)
-        # write response to file
-        with open('responses.csv', 'a') as f:
-            f.write(f'{time.time()}, {next_response}\n')
-        completion = next_response['choices'][0]['text']
-        # print("completion:", completion)
-        # print(next(response))
-        print(completion, end='')
-        generated_text = generated_text + completion
-        if next_response['choices'][0]['finish_reason'] != None: break
-
-    return generated_text
-
 def clear_screen_and_display_generated_files_with_animation(response, print_delay=0.001):
     generated_text = ''
     while True:
