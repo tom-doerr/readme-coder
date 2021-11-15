@@ -199,23 +199,8 @@ def get_args():
     return args
 
 
-def get_output(program):
-    stderr = None
-    stdout = None
-    success = False
 
-    # Run the program and capture its output
-    with open(os.devnull, 'w') as devnull:
-        try:
-            # Get the stderr and the stdout of the program program.
-            stdout = subprocess.check_output(program,  stderr=subprocess.STDOUT, shell=True).decode('utf-8')
-            success = True
-        except subprocess.CalledProcessError as e:
-            stderr =  e.output.decode('utf-8')
-
-    return stdout, stderr, success
-
-def get_output_timeout(program, timeout):
+def get_output(program, timeout):
     stderr = None
     stdout = None
     success = False
@@ -270,7 +255,7 @@ if __name__ == '__main__':
         command_with_docker = f'docker run --ulimit nofile=10000:10000 --rm -it -v $PWD:/mounted readme_coder_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
 
         # output, stderr, success = get_output(command_with_docker)
-        output, stderr, success = get_output_timeout(command_with_docker, args.timeout)
+        output, stderr, success = get_output(command_with_docker, args.timeout)
         print()
         # print the stderr in red.
         if stderr:
