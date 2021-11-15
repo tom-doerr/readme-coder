@@ -167,7 +167,8 @@ def save_files(files):
             try:
                 if '/' in file_name:
                     dirname = os.path.dirname(file_path)
-                    os.makedirs(dirname, exist_ok=True)
+                    dirname.mkdir(parents=True, exist_ok=True)
+                    # os.makedirs(dirname, exist_ok=True)    r
                 with open(file_path, 'w') as f:
                     f.write(file_text + '\n')
             except FileExistsError:
