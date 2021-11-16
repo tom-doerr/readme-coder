@@ -216,6 +216,11 @@ def get_output(program, timeout):
         except subprocess.CalledProcessError as e:
             stderr =  e.output.decode('utf-8')
 
+    # save all values to file
+    values = {'program': program, 'stdout': stdout, 'stderr': stderr, 'success': success}
+    with open('outputs.csv', 'a') as f:
+        f.write(f'{time.time()}, {values}\n')
+
     return stdout, stderr, success
 
 def generate_success_id():
