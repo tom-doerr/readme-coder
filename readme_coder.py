@@ -194,7 +194,7 @@ def get_args():
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
-    parser.add_argument('-m', '--model', type=str, default='cushman-codex', help='The model to use')
+    parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
     args = parser.parse_args()
     return args
 
