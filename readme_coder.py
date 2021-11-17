@@ -243,6 +243,7 @@ if __name__ == '__main__':
     initialize_openai_api()
     input_prompt = create_input_prompt(args.main_file)
     num_solutions = 0
+    start_time = time.time()
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
@@ -297,6 +298,7 @@ if __name__ == '__main__':
             os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
             num_solutions += 1
             if num_solutions >= args.num_solutons:
+                print('Ran for {} seconds'.format(time.time() - start_time))
                 sys.exit(0)
 
         if args.wait > 0:
@@ -306,6 +308,7 @@ if __name__ == '__main__':
                 print(f'  {i} s left', end='\r')
                 time.sleep(1)
 
+    print('Ran for {} seconds'.format(time.time() - start_time))
     print(colored('\n\n\n\Failed to generate {args.num_solutions}.', 'red'))
 
 
