@@ -238,12 +238,23 @@ def write_output_suc_id_file(output, suc_id):
     with open(os.path.join(SUCCESS_LINKS_DIR, f'{suc_id}.txt'), 'w') as f:
         f.write(output)
 
+def start_docker_container():
+    docker_start_command = f'docker run --ulimit nofile=10000:10000 --rm --name readme_coder_container -v $PWD:/mounted -dt readme_coder_image' 
+    # Check if the container is running
+    if subprocess.run(['docker', 'ps', '-a'], stdout=subprocess.PIPE).stdout.decode('utf-8').count('readme_coder_container') != 0:
+        # Stop the container
+        subprocess.run(['docker', 'stop', 'readme_coder_container'])
+
+    subprocess.check_output(docker_start_command, shell=True)
+
+
 if __name__ == '__main__':
     args = get_args()
     initialize_openai_api()
     input_prompt = create_input_prompt(args.main_file)
     num_solutions = 0
     start_time = time.time()
+    start_docker_container()
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
@@ -258,7 +269,7 @@ if __name__ == '__main__':
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
         command_inside_docker = ' '.join(args.command)
-        command_with_docker = f'docker run --ulimit nofile=10000:10000 --rm -it -v $PWD:/mounted readme_coder_image bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
+        command_with_docker = f'docker exec readme_coder_container bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
 
         # output, stderr, success = get_output(command_with_docker)
         output, stderr, success = get_output(command_with_docker, args.timeout)
