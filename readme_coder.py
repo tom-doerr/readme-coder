@@ -15,6 +15,7 @@ from termcolor import colored
 import random
 import string
 from pathlib import Path
+import re
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 STREAM = True
@@ -27,6 +28,8 @@ API_KEYS_LOCATION = os.path.join(CONFIG_DIR, 'openaiapirc')
 GENERATED_PROJECTS_DIR = 'generated_projects'
 SUCCESS_LINKS_DIR = 'success_links'
 SUCCESS_LINKS_ALL_DIR = os.path.join(SUCCESS_LINKS_DIR, 'all')
+DUMMY_DIR = 'dummy/'
+DOCKER_EXEC_COMMAND = 'docker exec readme_coder_container bash -c'
 
 PROMPT_BEGINNING = \
 '''
@@ -248,6 +251,32 @@ def start_docker_container():
     subprocess.check_output(docker_start_command, shell=True)
 
 
+def extract_module_name(text):
+    word = re.findall(r'(?<=No module named \')\w+', text)[0]
+    return word
+
+def write_module_name_to_file(module_name):
+    # Check if dir dummy exists and create it if not
+    if not os.path.exists(DUMMY_DIR):
+        os.mkdir(DUMMY_DIR)
+    with open(os.path.join(DUMMY_DIR, 'dummy.py'), 'w') as f:
+        f.write(f'import {module_name}')
+
+def run_pipreqs():
+    subprocess.run(['pipreqs', DUMMY_DIR, '--force'])
+
+def install_requirements():
+    print('= requirements.txt =')
+    with open(os.path.join(DUMMY_DIR, 'requirements.txt'), 'r') as f:
+        print(f.read())
+
+    print('= running pip3 install')
+    requirements_path = os.path.join(DUMMY_DIR, 'requirements.txt')
+    subprocess.run([f'{DOCKER_EXEC_COMMAND} "cd /mounted; pip3 install -r {requirements_path}"'], shell=True)
+    print('= pip3 install done')
+
+
+
 if __name__ == '__main__':
     args = get_args()
     initialize_openai_api()
@@ -269,10 +298,32 @@ if __name__ == '__main__':
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
         command_inside_docker = ' '.join(args.command)
-        command_with_docker = f'docker exec readme_coder_container bash -c "cd /mounted/{dir_name}; {command_inside_docker}" '
+        command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; {command_inside_docker}" '
 
-        # output, stderr, success = get_output(command_with_docker)
-        output, stderr, success = get_output(command_with_docker, args.timeout)
+        for _ in range(2):
+            output, stderr, success = get_output(command_with_docker, args.timeout)
+            if not stderr or not 'ModuleNotFoundError' in stderr:
+                break
+            
+            module_name = extract_module_name(stderr)
+            print(f'= Installing module {module_name}...')
+            write_module_name_to_file(module_name)
+            run_pipreqs()
+            install_requirements()
+
+        # Print python version
+        print(f'= Python version: {sys.version}')
+        print(os.system('python3 --version'))
+        # pip version
+        print(f'= Pip version: {subprocess.run(["pip3", "--version"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
+        # which pip
+        print(f'= Which pip: {subprocess.run(["which", "pip3"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
+        # which python
+        print(f'= Which python: {subprocess.run(["which", "python3"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
+        print('----------')
+        print(subprocess.run(['pip3', '--version']))
+
+
         print()
         # print the stderr in red.
         if stderr:
