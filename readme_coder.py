@@ -18,6 +18,8 @@ from pathlib import Path
 import re
 import jupyter_client
 
+import traceback
+
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
 
@@ -324,13 +326,21 @@ def generate_code_interactive():
     PROMPTS_ALL = 'prompts_interactive_all'
     kernel_id = start_ipython_kernel()
     prompt = PYTHON_INTERACTIVE_PROMPT
-    prompt += '>>> # Get the title of the newest blog entry from openai.com/blog/\n'
+    # prompt += '>>> # Print the text of the newest blog entry on openai.com/blog/\n'
+    # prompt += '>>> # Print the largest temperature from temps.csv'
+    # prompt += '>>> # Print the largest temperature from temps.csv'
+    prompt += '>>> # Merge the file temps.csv with the file temperatures.csv'
+    # prompt += '>>> # Steps:\n'
     for i in range(30):
         prompt += '>>> '
+        # only use last 6k characters
+        prompt = prompt[-6000:]
         try:
             response = generate_completion(prompt, 128, 'davinci-codex', stop=['>>>', '\n'], stream=False)
         except openai.error.InvalidRequestError:
             print('Invalid request error: {}'.format(prompt))
+            # show stacktrace
+            traceback.print_exc()
             print('Skipping prompt...')
             break
 
