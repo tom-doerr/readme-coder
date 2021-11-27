@@ -32,3 +32,13 @@ run DEBIAN_FRONTEND=noninteractive apt-get install -y \
 tzdata
 
 run dpkg-reconfigure -f noninteractive tzdata
+
+run pip3 install \
+pipreqs
+
+run pip3 install \
+ipython \
+ipykernel
+
+run pip3 install \
+jupyter_client
