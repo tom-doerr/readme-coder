@@ -16,9 +16,9 @@ import random
 import string
 from pathlib import Path
 import re
+import jupyter_client
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
-STREAM = True
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
 
 # Get config dir from environment or default to ~/.config
@@ -58,6 +58,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ============================================================
 **README.md:**
 
+'''
+
+PYTHON_INTERACTIVE_PROMPT = \
+'''
+Python 3.8.10 (default, Sep 28 2021, 16:10:42) 
+[GCC 9.3.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
 '''
 
 def create_template_ini_file():
@@ -106,8 +113,8 @@ def create_input_prompt(main_file, length=3000):
     return input_prompt
 
 
-def generate_completion(input_prompt, num_tokens, model):
-    args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': STREAM, 'stop': None, 'logprobs': 1}
+def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True):
+    args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': stream, 'stop': stop, 'logprobs': 1}
     response = openai.Completion.create(**args)
     # save args to file
     with open('args.csv', 'a') as f:
@@ -276,6 +283,100 @@ def install_requirements():
     print('= pip3 install done')
 
 
+def start_ipython_kernel():
+    log_file = '.ipython_kernel_ouput'
+    unix_timestamp_last_mod = os.path.getmtime(log_file)
+    subprocess.run([f'{DOCKER_EXEC_COMMAND} "cd /mounted; ipython kernel > .ipython_kernel_ouput" &'], shell=True)
+    wait_counter = 0
+    while True:
+        time.sleep(0.001)
+        unix_timestamp_current_mod = os.path.getmtime(log_file)
+        if unix_timestamp_current_mod > unix_timestamp_last_mod:
+            # Extract the kernel id from the output:
+            # '''To connect another client to this kernel, use:
+            # --existing kernel-3105870.json'''
+            output = ''
+            with open(log_file, 'r') as f:
+                output = f.read()
+
+            if 'kernel-' not in output:
+                wait_counter += 1
+                if wait_counter > 1000:
+                    print('Could not start the kernel')
+                    break
+                continue
+
+            kernel_id = output.split('kernel-')[1].split('.json')[0]
+            break
+
+    return kernel_id
+
+
+def run_code_ipython_docker(code, kernel_id):
+    # Run the code in the docker container
+    command = f'{DOCKER_EXEC_COMMAND} "cd /mounted; ./run_ipython_kernel.py --kernel-id {kernel_id}"'
+    output, stderr = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+    return output, stderr
+
+
+def generate_code_interactive():
+    CODE_FILE = 'generated_code_interactive'
+    PROMPTS_ALL = 'prompts_interactive_all'
+    kernel_id = start_ipython_kernel()
+    prompt = PYTHON_INTERACTIVE_PROMPT
+    prompt += '>>> # Get the title of the newest blog entry from openai.com/blog/\n'
+    for i in range(30):
+        prompt += '>>> '
+        try:
+            response = generate_completion(prompt, 128, 'davinci-codex', stop=['>>>', '\n'], stream=False)
+        except openai.error.InvalidRequestError:
+            print('Invalid request error: {}'.format(prompt))
+            print('Skipping prompt...')
+            break
+
+        completion = response['choices'][0]['text'] + '\n'
+        print("completion:", completion)
+        with open(CODE_FILE, 'a') as f:
+            f.write(completion)
+        prompt += completion
+        print("prompt:", prompt)
+        output, stderr = run_code_ipython_docker(completion, kernel_id)
+        prompt += output.decode('utf-8')
+
+        # output in green color
+        print(colored(output.decode('utf-8'), 'green'))
+
+        # error in red color
+        print(colored(stderr.decode('utf-8'), 'red'))
+
+        # output, stderr = run_code_ipython_docker('a=3', kernel_id)
+        # print("output:", output)
+        # print("stderr:", stderr)
+        # output, stderr = run_code_ipython_docker('a', kernel_id)
+        # print("output:", output)
+        # print("stderr:", stderr)
+        # print("output.decode('utf-8'):", output.decode('utf-8'))
+        # input()
+
+        # output, stderr = run_code_ipython_docker('import os', kernel_id)
+        # output, stderr = run_code_ipython_docker('os.getcwd()', kernel_id)
+        # print("output:", output)
+        # print("stderr:", stderr)
+        # print("output.decode('utf-8'):", output.decode('utf-8'))
+        # input()
+
+    # write prompt
+    with open(PROMPTS_ALL, 'a') as f:
+        f.write('======================')
+        f.write(prompt)
+
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     args = get_args()
@@ -284,11 +385,18 @@ if __name__ == '__main__':
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
+    mode = 'interactive'
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
         # print the attempt in bold
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
+
+        if mode == 'interactive':
+            generate_code_interactive()
+            continue
+
+
 
         response = generate_completion(input_prompt, args.num_tokens, args.model)
         print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
