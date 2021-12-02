@@ -127,7 +127,11 @@ def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True)
 def clear_screen_and_display_generated_files_with_animation(response, print_delay=0.001):
     generated_text = ''
     while True:
-        next_response = next(response)
+        try:
+            next_response = next(response)
+        except openai.error.APIError:
+            print('Error: API returned an error')
+            break
         with open('responses.csv', 'a') as f:
             f.write(f'{time.time()}, {next_response}\n')
         completion = next_response['choices'][0]['text']
@@ -252,10 +256,13 @@ def write_output_suc_id_file(output, suc_id):
 
 def start_docker_container():
     docker_start_command = f'docker run --ulimit nofile=10000:10000 --rm --name readme_coder_container -v $PWD:/mounted -dt readme_coder_image' 
-    # Check if the container is running
+    # Check if the container is running, stop it and wait for it to stop
     if subprocess.run(['docker', 'ps', '-a'], stdout=subprocess.PIPE).stdout.decode('utf-8').count('readme_coder_container') != 0:
         # Stop the container
         subprocess.run(['docker', 'stop', 'readme_coder_container'])
+        # Wait for the container to stop
+        while subprocess.run(['docker', 'ps', '-a'], stdout=subprocess.PIPE).stdout.decode('utf-8').count('readme_coder_container') != 0:
+            time.sleep(0.1)
 
     subprocess.check_output(docker_start_command, shell=True)
 
@@ -395,7 +402,7 @@ if __name__ == '__main__':
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
-    mode = 'interactive'
+    mode = 'normal'
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
