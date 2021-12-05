@@ -17,8 +17,8 @@ import string
 from pathlib import Path
 import re
 import jupyter_client
-
 import traceback
+import multiprocessing
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
@@ -439,7 +439,7 @@ def generate_code_interactive():
 
 
 
-if __name__ == '__main__':
+def main():
     args = get_args()
     initialize_openai_api()
     input_prompt = create_input_prompt(args.main_file)
@@ -546,3 +546,7 @@ if __name__ == '__main__':
 
 
   
+if __name__ == '__main__':
+    # Start the main program in the background
+    main_process = multiprocessing.Process(target=main)
+    main_process.start()
