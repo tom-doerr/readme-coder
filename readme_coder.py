@@ -181,7 +181,8 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                 for e in completion:
                     # print(e, end='', flush=True)
                     completion_char_by_char += e
-                    queues['generated_code'].put(generated_text + completion_char_by_char)
+                    generated_up_until_now = (generated_text + completion_char_by_char).replace(input_prompt, '')
+                    queues['generated_code'].put(generated_up_until_now)
                     time.sleep(print_delay)
 
                 generated_text = generated_text + completion
@@ -509,17 +510,6 @@ def main(queues, args):
             run_pipreqs()
             install_requirements()
 
-        # Print python version
-        print(f'= Python version: {sys.version}')
-        print(os.system('python3 --version'))
-        # pip version
-        print(f'= Pip version: {subprocess.run(["pip3", "--version"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
-        # which pip
-        print(f'= Which pip: {subprocess.run(["which", "pip3"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
-        # which python
-        print(f'= Which python: {subprocess.run(["which", "python3"], stdout=subprocess.PIPE).stdout.decode("utf-8")}')
-        print('----------')
-        print(subprocess.run(['pip3', '--version']))
 
 
         print()
