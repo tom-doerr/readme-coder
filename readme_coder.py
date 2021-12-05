@@ -19,6 +19,13 @@ import re
 import jupyter_client
 import traceback
 import multiprocessing
+from multiprocessing import Queue, Process
+
+from textual.app import App
+from textual.widgets import Placeholder
+from textual.widget import Widget
+from textual.reactive import Reactive
+from rich.panel import Panel
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
@@ -151,11 +158,11 @@ def get_logprobs_sum(logprobs_dicts):
     sum_all_logprobs = sum(sum_logprobs)
     return sum_all_logprobs
 
-def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, print_delay=0.001):
+def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay=0.001):
     generated_text = input_prompt
     top_logprobs = []
     num_tokens_generated = 0
-    num_sub_tokens = 10
+    num_sub_tokens = 100
     while  True:
         while True:
             response = generate_completion(generated_text, num_sub_tokens, args.model)
@@ -168,23 +175,37 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                 with open('responses.csv', 'a') as f:
                     f.write(f'{time.time()}, {next_response}\n')
                 completion = next_response['choices'][0]['text']
-                top_logprobs.extend(next_response['choices'][0]['logprobs']['top_logprobs'])
+                top_logprobs_current = next_response['choices'][0]['logprobs']['top_logprobs']
+                top_logprobs.extend(top_logprobs_current)
+                completion_char_by_char = ''
                 for e in completion:
-                    print(e, end='', flush=True)
+                    # print(e, end='', flush=True)
+                    completion_char_by_char += e
+                    queues['generated_code'].put(generated_text + completion_char_by_char)
                     time.sleep(print_delay)
 
                 generated_text = generated_text + completion
                 if next_response['choices'][0]['finish_reason'] != None: break
 
-            logprobs_sum = get_logprobs_sum(top_logprobs[-10:])
-            if logprobs_sum > -1.0:
-                break
+
+            if False:
+                logprobs_sum = get_logprobs_sum(top_logprobs[-10:])
+                if logprobs_sum > -1.0:
+                    break
+                else:
+                    # print logprobs sum in blue
+                    print(f'\033[1;34m{logprobs_sum}\033[0m')
             else:
-                # print logprobs sum in blue
-                print(f'\033[1;34m{logprobs_sum}\033[0m')
+                break
+
+
+        num_tokens_generated += len(top_logprobs_current)
+        if num_tokens_generated > args.num_tokens:
+            break
+
+
 
     generated_text = generated_text.replace(input_prompt, '')
-    print("generated_text:", generated_text)
     return generated_text
 
 def split_text_into_files(text):
@@ -439,8 +460,13 @@ def generate_code_interactive():
 
 
 
-def main():
-    args = get_args()
+def main(queues, args):
+    print("args:", args)
+    # for i in range(1000):
+        # # add random text to the generated_code
+        # generated_code.put('Hellooooooo World!')
+        # time.sleep(0.01)
+
     initialize_openai_api()
     input_prompt = create_input_prompt(args.main_file)
     num_solutions = 0
@@ -452,6 +478,7 @@ def main():
         print(f'{block_char * 30}', end='')
         # print the attempt in bold
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
+        queues['attempt'].put(attempt)
 
         if mode == 'interactive':
             generate_code_interactive()
@@ -461,7 +488,7 @@ def main():
 
         print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
         if args.backtrack:
-            generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt)
+            generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues)
         else:
             response = generate_completion(input_prompt, args.num_tokens, args.model)
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
@@ -546,7 +573,111 @@ def main():
 
 
   
+class Hover(Widget):
+
+    mouse_over = Reactive(False)
+
+    def on_mount(self) -> None:
+        self.set_interval(0.01, self.refresh)
+        self.last_text = ''
+
+    def render(self) -> Panel:
+        if not queues['generated_code'].empty():
+            text = queues['generated_code'].get()
+            self.last_text = text
+        else:
+            text = self.last_text
+        return Panel(text)
+
+    def on_enter(self) -> None:
+        self.mouse_over = True
+
+    def on_leave(self) -> None:
+        self.mouse_over = False
+
+class Custom1(Widget):
+
+    mouse_over = Reactive(False)
+
+    def on_mount(self) -> None:
+        self.set_interval(0.001, self.refresh)
+
+    def render(self) -> Panel:
+        return Panel(str(time.time()))
+
+    def on_enter(self) -> None:
+        self.mouse_over = True
+
+    def on_leave(self) -> None:
+        self.mouse_over = False
+
+    # parser.add_argument("main_file", help="The file to execute")
+    # parser.add_argument("command", nargs='*', help="The command to execute")
+    # parser.add_argument('-n', "--num_tokens", type=int, default=1000)
+    # parser.add_argument('-a', "--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
+    # parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
+    # parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
+    # parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
+    # parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
+    # parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
+    # parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
+
+class Stats(Widget):
+
+    mouse_over = Reactive(False)
+
+    def on_mount(self) -> None:
+        self.set_interval(0.01, self.refresh)
+        self.last_attempt = ''
+
+    def render(self) -> Panel:
+        if not queues['attempt'].empty():
+            attempt = queues['attempt'].get()
+            self.last_attempt = attempt
+        else:
+            attempt = self.last_attempt
+
+        text = ''
+        text += f'Main file: {args.main_file}\n'
+        text += f'Command: {args.command}\n'
+        text += f'Number of tokens: {args.num_tokens}\n'
+        text += f'Number of attempts: {args.num_attempts}\n'
+        text += f'Number of solutions: {args.num_solutons}\n'
+        text += f'Expected output: {args.output}\n'
+        text += f'Timeout: {args.timeout}\n'
+        text += f'Wait: {args.wait}\n'
+        text += f'Model: {args.model}\n'
+        text += f'Backtrack: {args.backtrack}\n'
+        text += f'\n'
+        text += f'Attempt: {attempt}'
+        return Panel(text)
+
+    def on_enter(self) -> None:
+        self.mouse_over = True
+
+    def on_leave(self) -> None:
+        self.mouse_over = False
+
+
+class SimpleApp(App):
+
+    async def on_mount(self) -> None:
+        await self.view.dock(Stats(), edge="left", size=40)
+        await self.view.dock(Custom1(), Hover(), edge="top")
+
+
+def create_queues():
+    queues = {}
+    queues['generated_code'] = Queue()
+    queues['attempt'] = Queue()
+    return queues
+
+
 if __name__ == '__main__':
+    args = get_args()
+    queues = create_queues()
     # Start the main program in the background
-    main_process = multiprocessing.Process(target=main)
+    main_process = Process(target=main, args=(queues, args))
     main_process.start()
+    SimpleApp.run(log="textual.log")
+    main_process.terminate()
