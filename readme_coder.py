@@ -664,7 +664,7 @@ class SimpleApp(App):
     async def on_mount(self) -> None:
         grid = await self.view.dock_grid(edge="left", name="left")
         grid.add_column(fraction=1, name="left")
-        grid.add_column(fraction=3, name="right")
+        grid.add_column(fraction=2, name="right")
         grid.add_row(fraction=2, name="top", min_size=2)
         grid.add_row(fraction=1, name="bottom", min_size=2)
 
