@@ -573,7 +573,7 @@ def main(queues, args):
 
 
   
-class Hover(Widget):
+class CodeWidget(Widget):
 
     mouse_over = Reactive(False)
 
@@ -662,8 +662,28 @@ class Stats(Widget):
 class SimpleApp(App):
 
     async def on_mount(self) -> None:
-        await self.view.dock(Stats(), edge="left", size=40)
-        await self.view.dock(Custom1(), Hover(), edge="top")
+        grid = await self.view.dock_grid(edge="left", name="left")
+        grid.add_column(fraction=1, name="left")
+        grid.add_column(fraction=3, name="right")
+        grid.add_row(fraction=2, name="top", min_size=2)
+        grid.add_row(fraction=1, name="bottom", min_size=2)
+
+        grid.add_areas(
+            area1="left",
+            area2="right,top",
+            area3="right,bottom",
+        )
+
+        grid.place(
+            area1=Stats(),
+            area2=CodeWidget(),
+            area3=Custom1(),
+        )
+
+
+    # async def on_mount(self) -> None:
+        # await self.view.dock(Stats(), edge="left", size=40)
+        # await self.view.dock(Custom1(), Hover(), edge="top")
 
 
 def create_queues():
