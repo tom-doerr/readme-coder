@@ -111,7 +111,6 @@ def create_input_prompt(main_file, length=3000):
     # Add the readme text to the input prompt.
     input_prompt = input_prompt + readme_text
     input_prompt += f'============================================================\n**{main_file}:**'
-    # input_prompt += '============================================================\n**'
     return input_prompt
 
 
