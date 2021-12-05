@@ -142,6 +142,50 @@ def clear_screen_and_display_generated_files_with_animation(response, print_dela
         generated_text = generated_text + completion
         if next_response['choices'][0]['finish_reason'] != None: break
 
+
+    return generated_text
+
+
+def get_logprobs_sum(logprobs_dicts):
+    logprobs_dict_values = [e.values() for e in logprobs_dicts]
+    sum_logprobs = [sum(e) for e in logprobs_dict_values]
+    sum_all_logprobs = sum(sum_logprobs)
+    return sum_all_logprobs
+
+def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, print_delay=0.001):
+    generated_text = input_prompt
+    top_logprobs = []
+    num_tokens_generated = 0
+    num_sub_tokens = 10
+    while  True:
+        while True:
+            response = generate_completion(generated_text, num_sub_tokens, args.model)
+            while True:
+                try:
+                    next_response = next(response)
+                except openai.error.APIError:
+                    print('Error: API returned an error')
+                    break
+                with open('responses.csv', 'a') as f:
+                    f.write(f'{time.time()}, {next_response}\n')
+                completion = next_response['choices'][0]['text']
+                top_logprobs.extend(next_response['choices'][0]['logprobs']['top_logprobs'])
+                for e in completion:
+                    print(e, end='', flush=True)
+                    time.sleep(print_delay)
+
+                generated_text = generated_text + completion
+                if next_response['choices'][0]['finish_reason'] != None: break
+
+            logprobs_sum = get_logprobs_sum(top_logprobs[-10:])
+            if logprobs_sum > -1.0:
+                break
+            else:
+                # print logprobs sum in blue
+                print(f'\033[1;34m{logprobs_sum}\033[0m')
+
+    generated_text = generated_text.replace(input_prompt, '')
+    print("generated_text:", generated_text)
     return generated_text
 
 def split_text_into_files(text):
@@ -211,6 +255,7 @@ def get_args():
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
     parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
+    parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
     args = parser.parse_args()
     return args
 
@@ -415,10 +460,12 @@ if __name__ == '__main__':
 
 
 
-        response = generate_completion(input_prompt, args.num_tokens, args.model)
         print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
-        # generated_text = clear_screen_and_display_generated_files(response)
-        generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
+        if args.backtrack:
+            generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt)
+        else:
+            response = generate_completion(input_prompt, args.num_tokens, args.model)
+            generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
         text_all = input_prompt + '\n' + generated_text
         files = split_text_into_files(text_all)
         dir_name = save_files(files)
