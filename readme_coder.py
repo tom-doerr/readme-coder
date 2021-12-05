@@ -675,9 +675,9 @@ class SimpleApp(App):
         )
 
         grid.place(
-            area1=Stats(),
+            area1=Custom1(),
             area2=CodeWidget(),
-            area3=Custom1(),
+            area3=Stats(),
         )
 
 
