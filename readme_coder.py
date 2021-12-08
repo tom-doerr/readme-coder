@@ -164,15 +164,28 @@ def get_logprobs_sum(logprobs_dicts):
     sum_all_logprobs = sum(sum_logprobs)
     return sum_all_logprobs
 
+
+def filter_tokens(completion, tokens):
+    tokens_filtered = []
+    for i in range(len(tokens)):
+        if tokens[-i] == completion[-len(tokens[-i]):]:
+            tokens_filtered.append(tokens[-i])
+            completion = completion[:-len(tokens[-i])]
+
+    tokens_filtered_inverse = tokens_filtered[::-1]
+    return tokens_filtered_inverse
+
 def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay=0.001):
-    generated_text = input_prompt
+    text_all = input_prompt
     top_logprobs = []
     num_tokens_generated = 0
     num_sub_tokens = 50
     USE_BACKTRACKING = True
+    tokens = []
+    print_response = False
     while  True:
         while True:
-            response = generate_completion(generated_text, num_sub_tokens, args.model)
+            response = generate_completion(text_all, num_sub_tokens, args.model)
             while True:
                 try:
                     next_response = next(response)
@@ -184,26 +197,47 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                 completion = next_response['choices'][0]['text']
                 top_logprobs_current = next_response['choices'][0]['logprobs']['top_logprobs']
                 top_logprobs.extend(top_logprobs_current)
+                tokens_filtered = filter_tokens(completion, next_response['choices'][0]['logprobs']['tokens'])
+                tokens.extend(tokens_filtered)
                 completion_char_by_char = ''
+                if print_response:
+                    print("completion:", completion)
+                    print("next_response['choices'][0]['logprobs']['tokens']:", next_response['choices'][0]['logprobs']['tokens'])
+                    time.sleep(10)
+                    print_response = False
+
                 for e in completion:
                     # print(e, end='', flush=True)
                     completion_char_by_char += e
-                    generated_up_until_now = (generated_text + completion_char_by_char).replace(input_prompt, '')
+                    generated_up_until_now = (text_all + completion_char_by_char).replace(input_prompt, '')
                     queues['generated_code'].put(generated_up_until_now)
                     time.sleep(print_delay)
 
                 num_tokens_generated += len(top_logprobs_current)
-                generated_text = generated_text + completion
+                # text_all = text_all + completion
+                generated_code = ''.join(tokens)
+                text_all = input_prompt + generated_code
                 if next_response['choices'][0]['finish_reason'] != None: break
 
 
+
             if USE_BACKTRACKING:
-                logprobs_sum = get_logprobs_sum(top_logprobs[-10:])
+                NUM_TOKENS_BACKTRACKING_CHECK = 20
+                logprobs_sum = get_logprobs_sum(top_logprobs[-NUM_TOKENS_BACKTRACKING_CHECK:])
                 if logprobs_sum > -1.0:
                     break
                 else:
                     # print logprobs sum in blue
                     print(f'\033[1;34m{logprobs_sum}\033[0m')
+                    top_logprobs = top_logprobs[:-NUM_TOKENS_BACKTRACKING_CHECK]
+                    tokens = tokens[:-NUM_TOKENS_BACKTRACKING_CHECK]
+                    generated_code = ''.join(tokens)
+                    text_all = input_prompt + generated_code
+                    # print("tokens:", tokens)
+                    for token in tokens:
+                        print('token: ', token, flush=True)
+                    print("text_all:", text_all)
+                    print_response = True
             else:
                 # break
                 pass
@@ -217,8 +251,8 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
 
 
 
-    generated_text = generated_text.replace(input_prompt, '')
-    return generated_text
+    text_all = text_all.replace(input_prompt, '')
+    return text_all
 
 def split_text_into_files(text):
     # Split text into files.
