@@ -572,7 +572,7 @@ class CodeWidget(Widget):
     mouse_over = Reactive(False)
 
     def on_mount(self) -> None:
-        self.set_interval(0.01, self.refresh)
+        self.set_interval(0.001, self.refresh)
         self.last_text = ''
 
     def render(self) -> Panel:
