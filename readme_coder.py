@@ -166,13 +166,20 @@ def get_logprobs_sum(logprobs_dicts):
 
 
 def filter_tokens(completion, tokens):
+    # print("tokens:", tokens)
     tokens_filtered = []
-    for i in range(len(tokens)):
-        if tokens[-i] == completion[-len(tokens[-i]):]:
-            tokens_filtered.append(tokens[-i])
-            completion = completion[:-len(tokens[-i])]
+    for token in tokens[::-1]:
+        if token == completion[-len(token):]:
+            # print("completion[-len(tokens[-i]):]:", completion[-len(token):])
+            tokens_filtered.append(token)
+            # print("tokens_filtered:", tokens_filtered)
+            completion = completion[:-len(token)]
+            # print("completion:", completion)
 
     tokens_filtered_inverse = tokens_filtered[::-1]
+    # print("tokens_filtered_inverse:", tokens_filtered_inverse)
+    # if len(tokens_filtered) != len(tokens):
+        # time.sleep(10)
     return tokens_filtered_inverse
 
 def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay=0.001):
@@ -201,9 +208,9 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                 tokens.extend(tokens_filtered)
                 completion_char_by_char = ''
                 if print_response:
-                    print("completion:", completion)
-                    print("next_response['choices'][0]['logprobs']['tokens']:", next_response['choices'][0]['logprobs']['tokens'])
-                    time.sleep(10)
+                    # print("completion:", completion)
+                    # print("next_response['choices'][0]['logprobs']['tokens']:", next_response['choices'][0]['logprobs']['tokens'])
+                    # time.sleep(10)
                     print_response = False
 
                 for e in completion:
@@ -228,15 +235,16 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                     break
                 else:
                     # print logprobs sum in blue
-                    print(f'\033[1;34m{logprobs_sum}\033[0m')
+                    if False:
+                        print(f'\033[1;34m{logprobs_sum}\033[0m')
                     top_logprobs = top_logprobs[:-NUM_TOKENS_BACKTRACKING_CHECK]
                     tokens = tokens[:-NUM_TOKENS_BACKTRACKING_CHECK]
                     generated_code = ''.join(tokens)
                     text_all = input_prompt + generated_code
                     # print("tokens:", tokens)
-                    for token in tokens:
-                        print('token: ', token, flush=True)
-                    print("text_all:", text_all)
+                    # for token in tokens:
+                        # print('token: ', token, flush=True)
+                    # print("text_all:", text_all)
                     print_response = True
             else:
                 # break
@@ -244,10 +252,9 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
 
 
 
-            if num_tokens_generated > args.num_tokens:
-                break
+        if num_tokens_generated > args.num_tokens:
+            break
 
-        break
 
 
 
