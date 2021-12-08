@@ -358,7 +358,9 @@ def install_requirements():
 
     print('= running pip3 install')
     requirements_path = os.path.join(DUMMY_DIR, 'requirements.txt')
-    subprocess.run([f'{DOCKER_EXEC_COMMAND} "cd /mounted; pip3 install -r {requirements_path}"'], shell=True)
+    pip_command = f'pip3 install -r {requirements_path}'
+    print(f'$ {pip_command}')
+    subprocess.run([f'{DOCKER_EXEC_COMMAND} "cd /mounted; {pip_command}"'], shell=True)
     print('= pip3 install done')
 
 
