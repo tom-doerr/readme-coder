@@ -468,7 +468,6 @@ def generate_code_interactive():
 
 
 def main(queues, args):
-    print("args:", args)
     # for i in range(1000):
         # # add random text to the generated_code
         # generated_code.put('Hellooooooo World!')
@@ -564,7 +563,10 @@ def main(queues, args):
                 print(f'  {i} s left', end='\r')
                 time.sleep(1)
 
-    print('Ran for {} seconds'.format(time.time() - start_time))
+    # Show the time the script run for in HH:MM:SS format
+    hh_mm_ss = str(datetime.timedelta(seconds=time.time() - start_time))
+    print(f'Ran for {hh_mm_ss}')
+    # print('Ran for {} seconds'.format(time.time() - start_time))
     print(colored(f'\n\n\n\Failed to generate {num_solutions}.', 'red'))
 
 
@@ -739,6 +741,12 @@ from rich.syntax import Syntax
 
 class SimpleApp(App):
 
+    def shutdown(self) -> None:
+        main_process.terminate()
+        main_process.join()
+        sys.exit(0)
+
+
     async def on_load(self) -> None:
         await self.bind("q", "quit", "Quit")
 
@@ -795,6 +803,23 @@ def create_queues():
     return queues
 
 
+
+import signal
+
+class GracefulExit(Exception):
+    pass
+
+
+def signal_handler(signum, frame):
+    print('Signal handler called with signal', signum)
+    # Kill the main_process process
+    main_process.terminate()
+    main_process.join()
+    sys.exit(0)
+
+    raise GracefulExit()
+
+
 if __name__ == '__main__':
     args = get_args()
     queues = create_queues()
@@ -806,3 +831,4 @@ if __name__ == '__main__':
     # Stop the main program
     main_process.terminate()
     main_process.join()
+    sys.exit(0)
