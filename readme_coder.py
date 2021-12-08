@@ -31,6 +31,8 @@ import pygments
 from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
 
+import datetime
+
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
 
@@ -166,7 +168,8 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
     generated_text = input_prompt
     top_logprobs = []
     num_tokens_generated = 0
-    num_sub_tokens = 100
+    num_sub_tokens = 50
+    USE_BACKTRACKING = True
     while  True:
         while True:
             response = generate_completion(generated_text, num_sub_tokens, args.model)
@@ -189,11 +192,12 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                     queues['generated_code'].put(generated_up_until_now)
                     time.sleep(print_delay)
 
+                num_tokens_generated += len(top_logprobs_current)
                 generated_text = generated_text + completion
                 if next_response['choices'][0]['finish_reason'] != None: break
 
 
-            if False:
+            if USE_BACKTRACKING:
                 logprobs_sum = get_logprobs_sum(top_logprobs[-10:])
                 if logprobs_sum > -1.0:
                     break
@@ -201,12 +205,15 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                     # print logprobs sum in blue
                     print(f'\033[1;34m{logprobs_sum}\033[0m')
             else:
+                # break
+                pass
+
+
+
+            if num_tokens_generated > args.num_tokens:
                 break
 
-
-        num_tokens_generated += len(top_logprobs_current)
-        if num_tokens_generated > args.num_tokens:
-            break
+        break
 
 
 
@@ -478,6 +485,7 @@ def main(queues, args):
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
+    generated_enough_solutions = False
     mode = 'normal'
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
@@ -553,8 +561,8 @@ def main(queues, args):
             os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
             num_solutions += 1
             if num_solutions >= args.num_solutions:
-                print('Ran for {} seconds'.format(time.time() - start_time))
-                sys.exit(0)
+                generated_enough_solutions = True
+                break
 
         if args.wait > 0:
             print(f'Waiting {args.wait} seconds before next attempt')
@@ -564,10 +572,11 @@ def main(queues, args):
                 time.sleep(1)
 
     # Show the time the script run for in HH:MM:SS format
-    hh_mm_ss = str(datetime.timedelta(seconds=time.time() - start_time))
+    hh_mm_ss = str(datetime.timedelta(seconds=int(time.time() - start_time)))
     print(f'Ran for {hh_mm_ss}')
-    # print('Ran for {} seconds'.format(time.time() - start_time))
-    print(colored(f'\n\n\n\Failed to generate {num_solutions}.', 'red'))
+
+    if not generated_enough_solutions:
+        print(colored(f'\n\n\nOnly generated {num_solutions}/{args.num_solutions} solutions.', 'red'))
 
 
   
@@ -827,8 +836,6 @@ if __name__ == '__main__':
     main_process = Process(target=main, args=(queues, args))
     main_process.start()
     SimpleApp.run(log="textual.log")
-    # Force stop the main program
-    # Stop the main program
     main_process.terminate()
     main_process.join()
     sys.exit(0)
