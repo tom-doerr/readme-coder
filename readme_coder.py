@@ -27,6 +27,10 @@ from textual.widget import Widget
 from textual.reactive import Reactive
 from rich.panel import Panel
 
+import pygments
+from pygments.lexers import PythonLexer
+from pygments.formatters import TerminalFormatter
+
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
 
@@ -271,7 +275,7 @@ def get_args():
     parser.add_argument("command", nargs='*', help="The command to execute")
     parser.add_argument('-n', "--num_tokens", type=int, default=1000)
     parser.add_argument('-a', "--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
-    parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
+    parser.add_argument('-s', "--num_solutions", type=int, default=1, help="The number of solutions to generate")
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
@@ -547,7 +551,7 @@ def main(queues, args):
                 os.remove(os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
             os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
             num_solutions += 1
-            if num_solutions >= args.num_solutons:
+            if num_solutions >= args.num_solutions:
                 print('Ran for {} seconds'.format(time.time() - start_time))
                 sys.exit(0)
 
@@ -559,7 +563,7 @@ def main(queues, args):
                 time.sleep(1)
 
     print('Ran for {} seconds'.format(time.time() - start_time))
-    print(colored('\n\n\n\Failed to generate {args.num_solutions}.', 'red'))
+    print(colored(f'\n\n\n\Failed to generate {num_solutions}.', 'red'))
 
 
   
@@ -572,18 +576,65 @@ class CodeWidget(Widget):
         self.last_text = ''
 
     def render(self) -> Panel:
-        if not queues['generated_code'].empty():
-            text = queues['generated_code'].get()
-            self.last_text = text
-        else:
-            text = self.last_text
-        return Panel(text)
+        # if not queues['generated_code'].empty():
+            # text = queues['generated_code'].get()
+            # self.last_text = text
+        # else:
+            # text = self.last_text
+
+        
+        text = self.last_text
+        while not queues['generated_code'].empty():
+            try:
+                text = queues['generated_code'].get_nowait()
+                self.last_text = text
+            except Exception as e:
+                print(e)
+
+
+        # text = self.last_text
+        # try:
+            # text = queues['generated_code'].get(timeout=0.1)
+        # except Exception as e:
+            # text = ''
+
+
+        # text = pygments.highlight(text.strip(), PythonLexer(), TerminalFormatter())
+
+        # syntax = Syntax.from_path(
+            # '/home/tom/test/zow.py',
+            # line_numbers=True,
+            # word_wrap=True,
+            # indent_guides=True,
+            # theme="monokai",
+        # )
+
+        _, height = self.size
+        text = '\n'.join(text.split('\n')[-height:])
+        text += '\n'*1000
+
+        syntax = Syntax(
+            text,
+            'python',
+            line_numbers=True,
+            word_wrap=True,
+            # indent_guides=True,
+            theme="monokai",
+        )
+
+        return syntax
+        # return Panel(text)
+
+        # text = 'jkl siw jkff'
+        # return Panel('\033[32m{}\033[0m'.format(text))
 
     def on_enter(self) -> None:
         self.mouse_over = True
 
     def on_leave(self) -> None:
         self.mouse_over = False
+
+
 
 class Custom1(Widget):
 
@@ -605,7 +656,7 @@ class Custom1(Widget):
     # parser.add_argument("command", nargs='*', help="The command to execute")
     # parser.add_argument('-n', "--num_tokens", type=int, default=1000)
     # parser.add_argument('-a', "--num_attempts", type=int, default=100, help="The number of attempts to generate the code")
-    # parser.add_argument('-s', "--num_solutons", type=int, default=1, help="The number of solutions to generate")
+    # parser.add_argument('-s', "--num_solutions", type=int, default=1, help="The number of solutions to generate")
     # parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     # parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     # parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
@@ -627,12 +678,14 @@ class Stats(Widget):
         else:
             attempt = self.last_attempt
 
+        # attempt = self.last_attempt
+
         text = ''
         text += f'Main file: {args.main_file}\n'
         text += f'Command: {args.command}\n'
         text += f'Number of tokens: {args.num_tokens}\n'
         text += f'Number of attempts: {args.num_attempts}\n'
-        text += f'Number of solutions: {args.num_solutons}\n'
+        text += f'Number of solutions: {args.num_solutions}\n'
         text += f'Expected output: {args.output}\n'
         text += f'Timeout: {args.timeout}\n'
         text += f'Wait: {args.wait}\n'
@@ -648,19 +701,72 @@ class Stats(Widget):
     def on_leave(self) -> None:
         self.mouse_over = False
 
+from textual.widgets import Header, Footer, FileClick, ScrollView, DirectoryTree
+
+# scroll_view = ScrollView(
+    # children=[
+        # DirectoryTree(
+            # path='../../',
+            # on_click=FileClick(
+                # on_click=lambda path: print(path)
+            # )
+        # ),
+        # Header(
+            # children=[
+                # CodeWidget(),
+                # Custom1(),
+                # Stats(),
+            # ]
+        # ),
+        # Footer(
+            # children=[
+                # 'Made with ❤️ by ',
+                # Link('test.de', 'https://test.de'),
+            # ]
+        # ),
+    # ]
+# )
+
+
+class DirectoryTreeCustom(DirectoryTree):
+    def on_mount(self) -> None:
+        self.set_interval(0.001, self.refresh)
+
+
+from rich.syntax import Syntax
 
 class SimpleApp(App):
 
+    async def on_load(self) -> None:
+        await self.bind("q", "quit", "Quit")
+
+
     async def on_mount(self) -> None:
+        # self.scroll_view = ScrollView()
+        # self.scroll_view.update(Panel('jkljkljkljkl'))
+
+        # syntax = Syntax.from_path(
+            # '/home/tom/test/latest',
+            # line_numbers=True,
+            # word_wrap=True,
+            # indent_guides=True,
+            # theme="monokai",
+        # )
+
+
+        # self.scroll_view.update(syntax) 
+
         grid = await self.view.dock_grid(edge="left", name="left")
         grid.add_column(fraction=1, name="left")
         grid.add_column(fraction=2, name="right")
-        grid.add_row(fraction=2, name="top", min_size=2)
+        grid.add_row(fraction=4, name="top", min_size=2)
+        grid.add_row(fraction=1, name="middle", min_size=2)
         grid.add_row(fraction=1, name="bottom", min_size=2)
 
         grid.add_areas(
             area1="left",
             area2="right,top",
+            area4="right,middle",
             area3="right,bottom",
         )
 
@@ -668,6 +774,10 @@ class SimpleApp(App):
             area1=Custom1(),
             area2=CodeWidget(),
             area3=Stats(),
+            # area4=self.scroll_view,
+            # area4=ScrollView(),
+            # area4=DirectoryTree(os.getcwd(), 'code'),
+            area4=DirectoryTreeCustom(os.getcwd(), 'code'),
         )
 
 
@@ -690,4 +800,7 @@ if __name__ == '__main__':
     main_process = Process(target=main, args=(queues, args))
     main_process.start()
     SimpleApp.run(log="textual.log")
+    # Force stop the main program
+    # Stop the main program
     main_process.terminate()
+    main_process.join()
