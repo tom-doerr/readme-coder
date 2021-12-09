@@ -186,7 +186,7 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
     text_all = input_prompt
     top_logprobs = []
     num_tokens_generated = 0
-    num_sub_tokens = 50
+    num_sub_tokens = 20
     USE_BACKTRACKING = True
     tokens = []
     print_response = False
@@ -229,9 +229,9 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
 
 
             if USE_BACKTRACKING:
-                NUM_TOKENS_BACKTRACKING_CHECK = 20
+                NUM_TOKENS_BACKTRACKING_CHECK = 2 * num_sub_tokens
                 logprobs_sum = get_logprobs_sum(top_logprobs[-NUM_TOKENS_BACKTRACKING_CHECK:])
-                if logprobs_sum > -1.0:
+                if logprobs_sum > -16.0:
                     break
                 else:
                     # print logprobs sum in blue
