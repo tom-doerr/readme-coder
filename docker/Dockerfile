@@ -48,3 +48,6 @@ jupyter_client
 
 run pip3 install \
 beautifulsoup4
+
+run pip3 install \
+pytest
