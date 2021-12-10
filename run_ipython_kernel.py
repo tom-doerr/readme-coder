@@ -15,7 +15,15 @@ def run_code_ipython(code, kernel_id):
     km=jupyter_client.BlockingKernelClient(connection_file=cf)
     km.load_connection_file()
 
-    km.execute_interactive(code, output_hook=get_output_ipython)
+    return_value = km.execute_interactive(code, output_hook=get_output_ipython)
+    # print("return_value:", return_value)
+    if 'traceback' in return_value['content']:
+        traceback = return_value['content']['traceback']
+
+        for line in traceback:
+            print(line)
+        
+        # print(traceback)
 
 
 if __name__ == '__main__':
