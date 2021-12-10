@@ -450,7 +450,7 @@ def start_ipython_kernel():
     return kernel_id
 
 
-def run_code_ipython_docker(code, kernel_id):
+def run_code_ipython_docker(kernel_id):
     # Run the code in the docker container
     command = f'{DOCKER_EXEC_COMMAND} "cd /mounted; ./run_ipython_kernel.py --kernel-id {kernel_id}"'
     output, stderr = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
@@ -483,13 +483,14 @@ def generate_code_interactive():
         completion = response['choices'][0]['text'] + '\n'
         # print("completion:", completion)
         with open(CODE_FILE, 'a') as f:
+            # completion = 'abc\n'
             f.write(completion)
         prompt += completion
         # print("prompt:", prompt)
 
         queues['text_generated_interactively'].put(prompt)
 
-        output, stderr = run_code_ipython_docker(completion, kernel_id)
+        output, stderr = run_code_ipython_docker(kernel_id)
         prompt += output.decode('utf-8')
 
         # output in green color
