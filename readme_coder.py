@@ -115,7 +115,7 @@ def initialize_openai_api():
 
 
 
-def create_input_prompt(main_file, length=3000):
+def create_input_prompt(main_file, length=3000, interactive=False):
     input_prompt = PROMPT_BEGINNING
     # Read the readme file.
     with open('README.md', 'r') as f:
@@ -123,7 +123,11 @@ def create_input_prompt(main_file, length=3000):
 
     # Add the readme text to the input prompt.
     input_prompt = input_prompt + readme_text
-    input_prompt += f'============================================================\n**{main_file}:**'
+    if interactive:
+        input_prompt += f'# Above program written in interactive mode\n```\n'
+        input_prompt += PYTHON_INTERACTIVE_PROMPT
+    else:
+        input_prompt += f'============================================================\n**{main_file}:**'
     return input_prompt
 
 
@@ -186,8 +190,11 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
     text_all = input_prompt
     top_logprobs = []
     num_tokens_generated = 0
-    num_sub_tokens = 20
-    USE_BACKTRACKING = True
+    # num_sub_tokens = 20
+    if args.backtrack:
+        num_sub_tokens = 20
+    else:
+        num_sub_tokens = args.num_tokens
     tokens = []
     print_response = False
     while  True:
@@ -196,6 +203,7 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
             while True:
                 try:
                     next_response = next(response)
+                    queues['model'].put(next_response['model'])
                 except openai.error.APIError:
                     print('Error: API returned an error')
                     break
@@ -228,8 +236,7 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
 
 
 
-            if USE_BACKTRACKING:
-                # NUM_TOKENS_BACKTRACKING_CHECK = 2 * num_sub_tokens
+            if args.backtrack:
                 NUM_TOKENS_BACKTRACKING_CHECK = 1 * num_sub_tokens
                 logprobs_sum = get_logprobs_sum(top_logprobs[-NUM_TOKENS_BACKTRACKING_CHECK:])
                 if logprobs_sum > -8.0:
@@ -248,12 +255,12 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                     # print("text_all:", text_all)
                     print_response = True
             else:
-                # break
-                pass
+                break
+                # pass
 
 
 
-        if num_tokens_generated > args.num_tokens:
+        if num_tokens_generated >= args.num_tokens:
             break
 
 
@@ -330,6 +337,7 @@ def get_args():
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
     parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
     parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
+    parser.add_argument('-i', '--interactive', action='store_true', help='Whether to run in interactive mode')
     args = parser.parse_args()
     return args
 
@@ -457,7 +465,7 @@ def generate_code_interactive():
     # prompt += '>>> # Print the text of the newest blog entry on openai.com/blog/\n'
     # prompt += '>>> # Print the largest temperature from temps.csv'
     # prompt += '>>> # Print the largest temperature from temps.csv'
-    prompt += '>>> # Merge the file temps.csv with the file temperatures.csv'
+    # prompt += '>>> # Merge the file temps.csv with the file temperatures.csv'
     # prompt += '>>> # Steps:\n'
     for i in range(30):
         prompt += '>>> '
@@ -473,11 +481,14 @@ def generate_code_interactive():
             break
 
         completion = response['choices'][0]['text'] + '\n'
-        print("completion:", completion)
+        # print("completion:", completion)
         with open(CODE_FILE, 'a') as f:
             f.write(completion)
         prompt += completion
-        print("prompt:", prompt)
+        # print("prompt:", prompt)
+
+        queues['text_generated_interactively'].put(prompt)
+
         output, stderr = run_code_ipython_docker(completion, kernel_id)
         prompt += output.decode('utf-8')
 
@@ -523,12 +534,13 @@ def main(queues, args):
         # time.sleep(0.01)
 
     initialize_openai_api()
+    # engines = openai.Engine.list()
+    # print("engines:", engines)
     input_prompt = create_input_prompt(args.main_file)
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
     generated_enough_solutions = False
-    mode = 'normal'
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
@@ -536,16 +548,15 @@ def main(queues, args):
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
         queues['attempt'].put(attempt)
 
-        if mode == 'interactive':
+        if args.interactive:
             generate_code_interactive()
             continue
 
 
 
         print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
-        if args.backtrack:
-            generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues)
-        else:
+        generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues)
+        if False:
             response = generate_completion(input_prompt, args.num_tokens, args.model)
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
         text_all = input_prompt + '\n' + generated_text
@@ -576,7 +587,7 @@ def main(queues, args):
         if output:
             print(colored(output, 'green'))
 
-        print("success:", success)
+        # print("success:", success)
         if success:
             if args.output:
                 if output.strip() != args.output.strip():
@@ -590,7 +601,7 @@ def main(queues, args):
                 print(colored('Output is empty', 'red'))
                 continue
 
-            print(colored("\n\n\nSuccess!", 'green'))
+            # print(colored("\n\n\nSuccess!", 'green'))
             suc_id = generate_success_id()
             # Create synlink to dir_name
             os.makedirs(SUCCESS_LINKS_ALL_DIR, exist_ok=True)
@@ -621,7 +632,49 @@ def main(queues, args):
         print(colored(f'\n\n\nOnly generated {num_solutions}/{args.num_solutions} solutions.', 'red'))
 
 
+class InteractiveCodeWidget(Widget):
+
+    mouse_over = Reactive(False)
+
+    def on_mount(self) -> None:
+        self.set_interval(0.001, self.refresh)
+        self.last_text = ''
+
+    def render(self) -> Panel:
+        text = self.last_text
+        while not queues['text_generated_interactively'].empty():
+            try:
+                text = queues['text_generated_interactively'].get_nowait()
+                self.last_text = text
+            except Exception as e:
+                print(e)
+
+        _, height = self.size
+        text = '\n'.join(text.split('\n')[-height:])
+        text += '\n'*1000
+
+        # syntax = Syntax(
+            # text,
+            # 'python',
+            # line_numbers=True,
+            # word_wrap=True,
+            # # indent_guides=True,
+            # theme="monokai",
+        # )
+
+        # return syntax
+        return Panel(text)
+
+
+    def on_enter(self) -> None:
+        self.mouse_over = True
+
+    def on_leave(self) -> None:
+        self.mouse_over = False
+
+
   
+
 class CodeWidget(Widget):
 
     mouse_over = Reactive(False)
@@ -725,6 +778,7 @@ class Stats(Widget):
     def on_mount(self) -> None:
         self.set_interval(0.01, self.refresh)
         self.last_attempt = ''
+        self.last_model = ''
 
     def render(self) -> Panel:
         if not queues['attempt'].empty():
@@ -732,6 +786,12 @@ class Stats(Widget):
             self.last_attempt = attempt
         else:
             attempt = self.last_attempt
+
+        if not queues['model'].empty():
+            model = queues['model'].get()
+            self.last_model = model
+        else:
+            model = self.last_model
 
         # attempt = self.last_attempt
 
@@ -747,6 +807,7 @@ class Stats(Widget):
         text += f'Model: {args.model}\n'
         text += f'Backtrack: {args.backtrack}\n'
         text += f'\n'
+        text += f'Model Version: {model}\n'
         text += f'Attempt: {attempt}'
         return Panel(text)
 
@@ -790,7 +851,7 @@ class DirectoryTreeCustom(DirectoryTree):
 
 from rich.syntax import Syntax
 
-class SimpleApp(App):
+class AutoCodingApp(App):
 
     def shutdown(self) -> None:
         main_process.terminate()
@@ -847,10 +908,47 @@ class SimpleApp(App):
         # await self.view.dock(Custom1(), Hover(), edge="top")
 
 
+class InteractiveCodingApp(App):
+
+    def shutdown(self) -> None:
+        main_process.terminate()
+        main_process.join()
+        sys.exit(0)
+
+
+    async def on_load(self) -> None:
+        await self.bind("q", "quit", "Quit")
+
+
+    async def on_mount(self) -> None:
+        grid = await self.view.dock_grid(edge="left", name="left")
+        grid.add_column(fraction=1, name="left")
+        grid.add_column(fraction=2, name="right")
+        grid.add_row(fraction=4, name="top", min_size=2)
+        grid.add_row(fraction=1, name="middle", min_size=2)
+        grid.add_row(fraction=1, name="bottom", min_size=2)
+
+        grid.add_areas(
+            area1="left",
+            area2="right,top",
+            area4="right,middle",
+            area3="right,bottom",
+        )
+
+        grid.place(
+            area1=Custom1(),
+            area2=InteractiveCodeWidget(),
+            area3=Stats(),
+            area4=DirectoryTreeCustom(os.getcwd(), 'code'),
+        )
+
+
 def create_queues():
     queues = {}
     queues['generated_code'] = Queue()
     queues['attempt'] = Queue()
+    queues['model'] = Queue()
+    queues['text_generated_interactively'] = Queue()
     return queues
 
 
@@ -872,12 +970,21 @@ def signal_handler(signum, frame):
 
 
 if __name__ == '__main__':
+    # initialize_openai_api()
+    # engines = openai.Engine.list()
+    # print("engines:", engines)
+    # input()
     args = get_args()
     queues = create_queues()
     # Start the main program in the background
     main_process = Process(target=main, args=(queues, args))
     main_process.start()
-    SimpleApp.run(log="textual.log")
+
+    if args.interactive:
+        InteractiveCodingApp().run(log="textual.log")
+    else:
+        AutoCodingApp.run(log="textual.log")
+
     main_process.terminate()
     main_process.join()
     sys.exit(0)
