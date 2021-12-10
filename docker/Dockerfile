@@ -42,3 +42,9 @@ ipykernel
 
 run pip3 install \
 jupyter_client
+
+
+# isntall module for soup
+
+run pip3 install \
+beautifulsoup4
