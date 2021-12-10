@@ -229,9 +229,10 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
 
 
             if USE_BACKTRACKING:
-                NUM_TOKENS_BACKTRACKING_CHECK = 2 * num_sub_tokens
+                # NUM_TOKENS_BACKTRACKING_CHECK = 2 * num_sub_tokens
+                NUM_TOKENS_BACKTRACKING_CHECK = 1 * num_sub_tokens
                 logprobs_sum = get_logprobs_sum(top_logprobs[-NUM_TOKENS_BACKTRACKING_CHECK:])
-                if logprobs_sum > -16.0:
+                if logprobs_sum > -8.0:
                     break
                 else:
                     # print logprobs sum in blue
