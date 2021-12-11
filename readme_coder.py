@@ -46,6 +46,8 @@ SUCCESS_LINKS_DIR = 'success_links'
 SUCCESS_LINKS_ALL_DIR = os.path.join(SUCCESS_LINKS_DIR, 'all')
 DUMMY_DIR = 'dummy/'
 DUMMY_DIR_LOCAL = os.path.join('mounted/', DUMMY_DIR)
+BASE_DIRS_DIR = 'base_dirs'
+
 DOCKER_EXEC_COMMAND = 'docker exec readme_coder_container bash -c'
 
 PROMPT_BEGINNING = \
@@ -287,13 +289,17 @@ def split_text_into_files(text):
 
     return files
 
-def save_files(files):
+def save_files(files, base_dir):
     # Save files to disk.
-    dir_name = os.path.join(GENERATED_PROJECTS_DIR, str(time.time()))
+    project_root_dir = str(time.time()).replace('.', '_')
+    dir_name = os.path.join(GENERATED_PROJECTS_DIR, project_root_dir)
     dir_name_local = os.path.join('mounted/', dir_name)
-    # make all dirs
     os.makedirs(dir_name_local)
-    # os.mkdir(dir_name)
+
+    # copy all files and directories from the base_dir to the new directory
+    os.system(f'cp -r {base_dir}/* {dir_name_local}')
+    
+
     for file_name, file_text in files.items():
         if file_name and file_name not in FILES_NOT_TO_INCLUDE:
             file_path = dir_name_local + '/' + file_name
@@ -341,9 +347,22 @@ def get_args():
     parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
     parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
     parser.add_argument('-i', '--interactive', action='store_true', help='Whether to run in interactive mode')
+    parser.add_argument('-d', '--base_dir', type=str, default=None, help='Directory the generated project is based on')
     args = parser.parse_args()
     return args
 
+
+def get_base_dir(base_dir_arg):
+    if base_dir_arg:
+        base_dir = base_dir_arg
+    else:
+        # Get the newest directory in BASE_DIRS_DIR.
+        base_dirs_dir = BASE_DIRS_DIR
+        base_dirs = [os.path.join(base_dirs_dir, d) for d in os.listdir(base_dirs_dir)]
+        base_dirs_dir_time = [os.path.getmtime(d) for d in base_dirs]
+        base_dir = base_dirs[base_dirs_dir_time.index(max(base_dirs_dir_time))]
+
+    return base_dir
 
 
 def get_output(program, timeout):
@@ -534,6 +553,7 @@ def generate_code_interactive():
 
 
 def main(queues, args):
+    base_dir = get_base_dir(args.base_dir)
     # create_dirs_if_needed()
     # for i in range(1000):
         # # add random text to the generated_code
@@ -568,7 +588,7 @@ def main(queues, args):
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
         text_all = input_prompt + '\n' + generated_text
         files = split_text_into_files(text_all)
-        dir_name = save_files(files)
+        dir_name = save_files(files, base_dir)
         command_inside_docker = ' '.join(args.command)
         command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; {command_inside_docker}" '
 
