@@ -32,6 +32,7 @@ from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
 
 import datetime
+import shutil
 
 FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
@@ -294,10 +295,14 @@ def save_files(files, base_dir):
     project_root_dir = str(time.time()).replace('.', '_')
     dir_name = os.path.join(GENERATED_PROJECTS_DIR, project_root_dir)
     dir_name_local = os.path.join('mounted/', dir_name)
-    os.makedirs(dir_name_local)
+    # os.makedirs(dir_name_local)
 
-    # copy all files and directories from the base_dir to the new directory
-    os.system(f'cp -r {base_dir}/* {dir_name_local}')
+
+    # copy all files and directories from the base_dir to the new directory except for files matching 'test*secret*'
+    shutil.copytree(base_dir, dir_name_local, ignore=shutil.ignore_patterns('test*secret*'))
+
+    # if os.path.exists(os.path.join(base_dir, 'test*secret*')):
+    # os.system(f'cp -r {base_dir}/* {dir_name_local}')
     
 
     for file_name, file_text in files.items():
@@ -330,7 +335,7 @@ def save_files(files, base_dir):
                 print('Skipping file...')
                 continue
 
-    return dir_name
+    return dir_name, dir_name_local
 
 
 def get_args():
@@ -549,6 +554,16 @@ def generate_code_interactive():
         # os.makedirs(GENERATED_PROJECTS_DIR_LOCAL)
 
 
+def run_pytest(dir_name, dir_name_local, base_dir):
+    # Copy all files from base_dir to dir_name that match the 'test*secret*' pattern
+    # Check if files {base_dir}/test*secret exist
+    if os.path.exists(os.path.join(base_dir, 'test*secret*')):
+        os.system(f'cp -r {base_dir}/test*secret {dir_name_local}')
+    command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; pytest" '
+    output, stderr, success = get_output(command_with_docker, args.timeout)
+    print("stderr:", stderr)
+    print("output:", output)
+
 
 
 
@@ -588,7 +603,7 @@ def main(queues, args):
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
         text_all = input_prompt + '\n' + generated_text
         files = split_text_into_files(text_all)
-        dir_name = save_files(files, base_dir)
+        dir_name, dir_name_local = save_files(files, base_dir)
         command_inside_docker = ' '.join(args.command)
         command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; {command_inside_docker}" '
 
@@ -613,6 +628,8 @@ def main(queues, args):
         # print the output in green.
         if output:
             print(colored(output, 'green'))
+
+        run_pytest(dir_name, dir_name_local, base_dir)
 
         # print("success:", success)
         if success:
