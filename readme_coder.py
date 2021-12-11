@@ -41,9 +41,11 @@ CONFIG_DIR = os.getenv('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
 API_KEYS_LOCATION = os.path.join(CONFIG_DIR, 'openaiapirc')
 
 GENERATED_PROJECTS_DIR = 'generated_projects'
+GENERATED_PROJECTS_DIR_LOCAL = os.path.join('mounted/', GENERATED_PROJECTS_DIR)
 SUCCESS_LINKS_DIR = 'success_links'
 SUCCESS_LINKS_ALL_DIR = os.path.join(SUCCESS_LINKS_DIR, 'all')
 DUMMY_DIR = 'dummy/'
+DUMMY_DIR_LOCAL = os.path.join('mounted/', DUMMY_DIR)
 DOCKER_EXEC_COMMAND = 'docker exec readme_coder_container bash -c'
 
 PROMPT_BEGINNING = \
@@ -288,12 +290,13 @@ def split_text_into_files(text):
 def save_files(files):
     # Save files to disk.
     dir_name = os.path.join(GENERATED_PROJECTS_DIR, str(time.time()))
+    dir_name_local = os.path.join('mounted/', dir_name)
     # make all dirs
-    os.makedirs(dir_name)
+    os.makedirs(dir_name_local)
     # os.mkdir(dir_name)
     for file_name, file_text in files.items():
         if file_name and file_name not in FILES_NOT_TO_INCLUDE:
-            file_path = dir_name + '/' + file_name
+            file_path = dir_name_local + '/' + file_name
             # Create directories if needed.
             try:
                 if '/' in file_name:
@@ -382,7 +385,7 @@ def write_output_suc_id_file(output, suc_id):
         f.write(output)
 
 def start_docker_container():
-    docker_start_command = f'docker run --ulimit nofile=10000:10000 --rm --name readme_coder_container -v $PWD:/mounted -dt readme_coder_image' 
+    docker_start_command = f'docker run --ulimit nofile=10000:10000 --rm --name readme_coder_container -v $PWD/mounted:/mounted -dt readme_coder_image' 
     # Check if the container is running, stop it and wait for it to stop
     if subprocess.run(['docker', 'ps', '-a'], stdout=subprocess.PIPE).stdout.decode('utf-8').count('readme_coder_container') != 0:
         # Stop the container
@@ -400,13 +403,13 @@ def extract_module_name(text):
 
 def write_module_name_to_file(module_name):
     # Check if dir dummy exists and create it if not
-    if not os.path.exists(DUMMY_DIR):
-        os.mkdir(DUMMY_DIR)
-    with open(os.path.join(DUMMY_DIR, 'dummy.py'), 'w') as f:
+    if not os.path.exists(DUMMY_DIR_LOCAL):
+        os.mkdir(DUMMY_DIR_LOCAL)
+    with open(os.path.join(DUMMY_DIR_LOCAL, 'dummy.py'), 'w') as f:
         f.write(f'import {module_name}')
 
 def run_pipreqs():
-    subprocess.run(['pipreqs', DUMMY_DIR, '--force'])
+    subprocess.run(['pipreqs', DUMMY_DIR_LOCAL, '--force'])
 
 def install_requirements():
     print('= requirements.txt =')
@@ -522,13 +525,16 @@ def generate_code_interactive():
 
 
 
-
+# def create_dirs_if_needed():
+    # if not os.path.exists(GENERATED_PROJECTS_DIR_LOCAL):
+        # os.makedirs(GENERATED_PROJECTS_DIR_LOCAL)
 
 
 
 
 
 def main(queues, args):
+    # create_dirs_if_needed()
     # for i in range(1000):
         # # add random text to the generated_code
         # generated_code.put('Hellooooooo World!')
