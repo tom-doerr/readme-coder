@@ -34,7 +34,6 @@ from pygments.formatters import TerminalFormatter
 import datetime
 import shutil
 
-FILES_NOT_TO_INCLUDE = ['LICENSE', 'README.md']
 cur_dir_not_full_path = os.getcwd().split('/')[-1]
 
 # Get config dir from environment or default to ~/.config
@@ -44,7 +43,8 @@ API_KEYS_LOCATION = os.path.join(CONFIG_DIR, 'openaiapirc')
 GENERATED_PROJECTS_DIR = 'generated_projects'
 GENERATED_PROJECTS_DIR_LOCAL = os.path.join('mounted/', GENERATED_PROJECTS_DIR)
 SUCCESS_LINKS_DIR = 'success_links'
-SUCCESS_LINKS_ALL_DIR = os.path.join(SUCCESS_LINKS_DIR, 'all')
+SUCCESS_LINKS_ALL_DIR = 'success_links_all'
+SUCCESS_LINKS_OLD_DIR = 'success_links_old'
 DUMMY_DIR = 'dummy/'
 DUMMY_DIR_LOCAL = os.path.join('mounted/', DUMMY_DIR)
 BASE_DIRS_DIR = 'base_dirs'
@@ -120,10 +120,10 @@ def initialize_openai_api():
 
 
 
-def create_input_prompt(main_file, length=3000, interactive=False):
+def create_input_prompt(main_file, base_dir, length=3000, interactive=False):
     input_prompt = PROMPT_BEGINNING
     # Read the readme file.
-    with open('README.md', 'r') as f:
+    with open(os.path.join(base_dir, 'README.md'), 'r') as f:
         readme_text = f.read()
 
     # Add the readme text to the input prompt.
@@ -306,34 +306,33 @@ def save_files(files, base_dir):
     
 
     for file_name, file_text in files.items():
-        if file_name and file_name not in FILES_NOT_TO_INCLUDE:
-            file_path = dir_name_local + '/' + file_name
-            # Create directories if needed.
-            try:
-                if '/' in file_name:
-                    dirname = os.path.dirname(file_path)
-                    dirname_path = Path(dirname)
-                    try:
-                        dirname_path.mkdir(parents=True, exist_ok=True)
-                    except NotADirectoryError:
-                        print('Not a directory: {}'.format(dirname))
-                        print('Skipping file: {}'.format(file_name))
-                        continue
-                    # os.makedirs(dirname, exist_ok=True)    r
-                with open(file_path, 'w') as f:
-                    f.write(file_text + '\n')
-            except FileExistsError:
-                print('File already exists: {}'.format(file_path))
-                print('Skipping file...')
-                continue
-            except IsADirectoryError:
-                print('File is a directory: {}'.format(file_path))
-                print('Skipping file...')
-                continue
-            except OSError:
-                print('OSError: {}'.format(file_path))
-                print('Skipping file...')
-                continue
+        file_path = dir_name_local + '/' + file_name
+        # Create directories if needed.
+        try:
+            if '/' in file_name:
+                dirname = os.path.dirname(file_path)
+                dirname_path = Path(dirname)
+                try:
+                    dirname_path.mkdir(parents=True, exist_ok=True)
+                except NotADirectoryError:
+                    print('Not a directory: {}'.format(dirname))
+                    print('Skipping file: {}'.format(file_name))
+                    continue
+                # os.makedirs(dirname, exist_ok=True)    r
+            with open(file_path, 'w') as f:
+                f.write(file_text + '\n')
+        except FileExistsError:
+            print('File already exists: {}'.format(file_path))
+            print('Skipping file...')
+            continue
+        except IsADirectoryError:
+            print('File is a directory: {}'.format(file_path))
+            print('Skipping file...')
+            continue
+        except OSError:
+            print('OSError: {}'.format(file_path))
+            print('Skipping file...')
+            continue
 
     return dir_name, dir_name_local
 
@@ -556,18 +555,25 @@ def generate_code_interactive():
 
 def run_pytest(dir_name, dir_name_local, base_dir):
     # Copy all files from base_dir to dir_name that match the 'test*secret*' pattern
-    # Check if files {base_dir}/test*secret exist
-    if os.path.exists(os.path.join(base_dir, 'test*secret*')):
-        os.system(f'cp -r {base_dir}/test*secret {dir_name_local}')
+    # Check if files {base_dir}/test*secret exist using glob
+    import glob
+    if len(glob.glob(f'{base_dir}/test*secret*')) > 0:
+        # for file in glob.glob(f'{base_dir}/test*secret*'):
+            # shutil.copy(file, dir
+    # if os.path.exists(os.path.join(base_dir, 'test*secret*')):
+        os.system(f'cp -r {base_dir}/test*secret* {dir_name_local}')
     command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; pytest" '
-    output, stderr, success = get_output(command_with_docker, args.timeout)
-    print("stderr:", stderr)
-    print("output:", output)
+    stdout, stderr, success = get_output(command_with_docker, args.timeout)
+    if stderr:
+        return False
+    else:
+        return True
 
 
 
 
 def main(queues, args):
+    move_old_symlinks()
     base_dir = get_base_dir(args.base_dir)
     # create_dirs_if_needed()
     # for i in range(1000):
@@ -578,7 +584,7 @@ def main(queues, args):
     initialize_openai_api()
     # engines = openai.Engine.list()
     # print("engines:", engines)
-    input_prompt = create_input_prompt(args.main_file)
+    input_prompt = create_input_prompt(args.main_file, base_dir)
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
@@ -608,7 +614,7 @@ def main(queues, args):
         command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; {command_inside_docker}" '
 
         for _ in range(2):
-            output, stderr, success = get_output(command_with_docker, args.timeout)
+            output, stderr, execution_success = get_output(command_with_docker, args.timeout)
             if not stderr or not 'ModuleNotFoundError' in stderr:
                 break
             
@@ -629,9 +635,9 @@ def main(queues, args):
         if output:
             print(colored(output, 'green'))
 
-        run_pytest(dir_name, dir_name_local, base_dir)
+        pytest_success = run_pytest(dir_name, dir_name_local, base_dir)
 
-        # print("success:", success)
+        success = execution_success and pytest_success
         if success:
             if args.output:
                 if output.strip() != args.output.strip():
@@ -645,17 +651,9 @@ def main(queues, args):
                 print(colored('Output is empty', 'red'))
                 continue
 
-            # print(colored("\n\n\nSuccess!", 'green'))
             suc_id = generate_success_id()
-            # Create synlink to dir_name
-            os.makedirs(SUCCESS_LINKS_ALL_DIR, exist_ok=True)
-            os.symlink(os.path.join('../..', dir_name), os.path.join(SUCCESS_LINKS_ALL_DIR, str(time.time())))
-            os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, suc_id))
+            create_symlinks(suc_id, dir_name_local)
             write_output_suc_id_file(output, suc_id)
-            # overwrite success_latest link
-            if os.path.exists(os.path.join(SUCCESS_LINKS_DIR, 'success_latest')):
-                os.remove(os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
-            os.symlink(os.path.join('..', dir_name), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
             num_solutions += 1
             if num_solutions >= args.num_solutions:
                 generated_enough_solutions = True
@@ -674,6 +672,28 @@ def main(queues, args):
 
     if not generated_enough_solutions:
         print(colored(f'\n\n\nOnly generated {num_solutions}/{args.num_solutions} solutions.', 'red'))
+
+
+def move_old_symlinks():
+    dir_for_old_links = os.path.join(SUCCESS_LINKS_OLD_DIR, str(int(time.time())))
+    os.makedirs(dir_for_old_links)
+    # move all files in SUCCESS_LINKS_DIR to dir_for_old_links
+    for file in os.listdir(SUCCESS_LINKS_DIR):
+        os.rename(os.path.join(SUCCESS_LINKS_DIR, file), os.path.join(dir_for_old_links, file))
+        # if the file is a symlink, change the link location to ../symlink. 
+        if os.path.islink(os.path.join(dir_for_old_links, file)):
+            link_destination = os.readlink(os.path.join(dir_for_old_links, file))
+            os.remove(os.path.join(dir_for_old_links, file))
+            os.symlink(os.path.join('..', link_destination), os.path.join(dir_for_old_links, file))
+
+
+def create_symlinks(suc_id, dir_name_local):
+    os.makedirs(SUCCESS_LINKS_ALL_DIR, exist_ok=True)
+    os.symlink(os.path.join('..', dir_name_local), os.path.join(SUCCESS_LINKS_ALL_DIR, str(time.time())))
+    os.symlink(os.path.join('..', dir_name_local), os.path.join(SUCCESS_LINKS_DIR, suc_id))
+    if os.path.exists(os.path.join(SUCCESS_LINKS_DIR, 'success_latest')):
+        os.remove(os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
+    os.symlink(os.path.join('..', dir_name_local), os.path.join(SUCCESS_LINKS_DIR, 'success_latest'))
 
 
 class InteractiveCodeWidget(Widget):
