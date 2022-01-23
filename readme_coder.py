@@ -348,7 +348,7 @@ def get_args():
     parser.add_argument('-o', '--output', type=str, default=None, help='The expected output of the code')
     parser.add_argument('-t', '--timeout', type=int, default=1, help='The timeout for the code to run')
     parser.add_argument('-w', '--wait', type=int, default=0, help='The time to wait between attempts')
-    parser.add_argument('-m', '--model', type=str, default='davinci-codex', help='The model to use')
+    parser.add_argument('-m', '--model', type=str, default='code-davinci-001', help='The model to use')
     parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
     parser.add_argument('-i', '--interactive', action='store_true', help='Whether to run in interactive mode')
     parser.add_argument('-d', '--base_dir', type=str, default=None, help='Directory the generated project is based on')
@@ -498,7 +498,7 @@ def generate_code_interactive():
         # only use last 6k characters
         prompt = prompt[-6000:]
         try:
-            response = generate_completion(prompt, 128, 'davinci-codex', stop=['>>>', '\n'], stream=False)
+            response = generate_completion(prompt, 128, 'code-davinci-001', stop=['>>>', '\n'], stream=False)
         except openai.error.InvalidRequestError:
             print('Invalid request error: {}'.format(prompt))
             # show stacktrace
@@ -602,7 +602,7 @@ def main(queues, args):
 
 
 
-        print_delay = 0.005 if args.model == 'davinci-codex' else 0.001
+        print_delay = 0.005 if args.model == 'code-davinci-001' else 0.001
         generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues)
         if False:
             response = generate_completion(input_prompt, args.num_tokens, args.model)
