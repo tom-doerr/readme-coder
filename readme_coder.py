@@ -191,6 +191,8 @@ def filter_tokens(completion, tokens):
         # time.sleep(10)
     return tokens_filtered_inverse
 
+
+
 def clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay=0.001):
     text_all = input_prompt
     top_logprobs = []
@@ -555,6 +557,16 @@ def generate_code_interactive():
 
 def run_pytest(dir_name, dir_name_local, base_dir):
     # Copy all files from base_dir to dir_name that match the 'test*secret*' pattern
+    # Check if pytest tests are present in the base_dir
+    pytest_tests_present = False
+    for file_name in os.listdir(base_dir):
+        if file_name.startswith('test'):
+            pytest_tests_present = True
+            break
+
+    if not pytest_tests_present:
+        return True
+
     # Check if files {base_dir}/test*secret exist using glob
     import glob
     if len(glob.glob(f'{base_dir}/test*secret*')) > 0:
