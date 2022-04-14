@@ -51,3 +51,12 @@ beautifulsoup4
 
 run pip3 install \
 pytest
+
+# install chromeium and the chrome driver
+run apt-get install -y \
+chromium-browser \
+chromium-chromedriver
+
+run pip3 install \
+selenium
+
