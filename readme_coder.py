@@ -635,8 +635,8 @@ def main(queues, args):
 
 
 
-        print_delay = 0.005 if args.model == 'code-davinci-001' else 0.001
-        generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues)
+        print_delay = 0.005 if 'code-davinci' in args.model else 0.001
+        generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay)
         if False:
             response = generate_completion(input_prompt, args.num_tokens, args.model)
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
