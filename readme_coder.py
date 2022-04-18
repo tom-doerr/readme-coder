@@ -74,11 +74,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-============================================================
-**README.md:**
-
 '''
+
 
 PYTHON_INTERACTIVE_PROMPT = \
 '''
@@ -122,12 +119,24 @@ def initialize_openai_api():
 
 def create_input_prompt(main_file, base_dir, length=3000, interactive=False):
     input_prompt = PROMPT_BEGINNING
-    # Read the readme file.
-    with open(os.path.join(base_dir, 'README.md'), 'r') as f:
-        readme_text = f.read()
+    # read all files in the current directory and add them to the input prompt except for the README.md
+    files = os.listdir(base_dir)
+    # move README.md to the end of the list
+    files.remove('README.md')
+    files.append('README.md')
+    for file in os.listdir(base_dir):
+        input_prompt += f'\n============================================================\n**{file}:**\n\n'
+        with open(os.path.join(base_dir, file), 'r') as f:
+            input_prompt += f.read()
 
-    # Add the readme text to the input prompt.
-    input_prompt = input_prompt + readme_text
+
+
+    # Read the readme file.
+    # with open(os.path.join(base_dir, 'README.md'), 'r') as f:
+        # readme_text = f.read()
+
+    # # Add the readme text to the input prompt.
+    # input_prompt = input_prompt + readme_text
     if interactive:
         input_prompt += f'# Above program written in interactive mode\n```\n'
         input_prompt += PYTHON_INTERACTIVE_PROMPT
@@ -136,9 +145,15 @@ def create_input_prompt(main_file, base_dir, length=3000, interactive=False):
     return input_prompt
 
 
-def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True):
+def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True, attempt_num=0):
     args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': stream, 'stop': stop, 'logprobs': 1}
-    response = openai.Completion.create(**args)
+    try:
+        response = openai.Completion.create(**args)
+    except (openai.error.APIConnectionError, openai.error.RateLimitError) as e:
+        # print error colored
+        print(colored(e, 'yellow'))
+        time.sleep(2**attempt_num)
+        return generate_completion(input_prompt, num_tokens, model, stop, stream, attempt_num=attempt_num+1)
     # save args to file
     with open('args.csv', 'a') as f:
         f.write(f'{time.time()}, {args}\n')
@@ -150,8 +165,9 @@ def clear_screen_and_display_generated_files_with_animation(response, print_dela
     while True:
         try:
             next_response = next(response)
-        except openai.error.APIError:
-            print('Error: API returned an error')
+        except openai.error.APIError as e:
+            # print('Error: API returned an error')
+            print(colored(e, 'yellow'))
             break
         with open('responses.csv', 'a') as f:
             f.write(f'{time.time()}, {next_response}\n')
@@ -380,7 +396,10 @@ def get_output(program, timeout):
     with open(os.devnull, 'w') as devnull:
         try:
             # Get the stderr and the stdout of the program program.
-            stdout = subprocess.check_output(program,  stderr=subprocess.STDOUT, shell=True, timeout=timeout).decode('utf-8')
+            # stdout = subprocess.check_output(program,  stderr=subprocess.STDOUT, shell=True, timeout=timeout).decode('utf-8')
+            cmd = ['timeout', str(timeout), 'bash', '-c', program]
+            stdout = subprocess.check_output(cmd,  stderr=subprocess.STDOUT, timeout=timeout).decode('utf-8')
+            # subprocess.check_call(program, shell=True, timeout=timeout)
             success = True
         except subprocess.TimeoutExpired:
             stderr =  "Timeout"
@@ -606,6 +625,8 @@ def main(queues, args):
         print(f'{block_char * 30}', end='')
         # print the attempt in bold
         print("\033[1m Attempt: " + str(attempt) + "\033[0m")
+        # print("input_prompt:", input_prompt)
+        queues['input_prompt'].put(input_prompt)
         queues['attempt'].put(attempt)
 
         if args.interactive:
@@ -925,6 +946,29 @@ class DirectoryTreeCustom(DirectoryTree):
         self.set_interval(0.001, self.refresh)
 
 
+class PromptViewer(ScrollView):
+    def on_mount(self) -> None:
+        self.set_interval(0.001, self.set_text)
+
+    # def set_text(self) -> None:
+        # if not queues['input_prompt'].empty():
+            # prompt = queues['input_prompt'].get()
+            # self.update(Panel(prompt))
+        # else:
+            # self.update(Panel(' - '))
+
+
+    # fix was never awaited error
+    async def set_text(self) -> None:
+        while True:
+            if not queues['input_prompt'].empty():
+                prompt = await queues['input_prompt'].get()
+                self.update(Panel(prompt))
+            else:
+                self.update(Panel(' - '))
+            await asyncio.sleep(0.1)
+
+
 from rich.syntax import Syntax
 
 class AutoCodingApp(App):
@@ -961,12 +1005,17 @@ class AutoCodingApp(App):
         grid.add_row(fraction=1, name="middle", min_size=2)
         grid.add_row(fraction=1, name="bottom", min_size=2)
 
+
+
         grid.add_areas(
             area1="left",
             area2="right,top",
             area4="right,middle",
             area3="right,bottom",
         )
+
+        # self.prompt = ScrollView()
+        self.prompt = PromptViewer()
 
         grid.place(
             area1=Custom1(),
@@ -976,6 +1025,7 @@ class AutoCodingApp(App):
             # area4=ScrollView(),
             # area4=DirectoryTree(os.getcwd(), 'code'),
             area4=DirectoryTreeCustom(os.getcwd(), 'code'),
+            # area4=self.prompt,
         )
 
 
@@ -1023,6 +1073,7 @@ def create_queues():
     queues = {}
     queues['generated_code'] = Queue()
     queues['attempt'] = Queue()
+    queues['input_prompt'] = Queue()
     queues['model'] = Queue()
     queues['text_generated_interactively'] = Queue()
     return queues
