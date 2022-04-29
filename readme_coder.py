@@ -577,7 +577,7 @@ def generate_code_interactive():
         # os.makedirs(GENERATED_PROJECTS_DIR_LOCAL)
 
 
-def run_pytest(dir_name, dir_name_local, base_dir, args):
+def run_pytest(dir_name, dir_name_local, base_dir, args, queues):
     # Copy all files from base_dir to dir_name that match the 'test*secret*' pattern
     # Check if pytest tests are present in the base_dir
     pytest_tests_present = False
@@ -604,6 +604,16 @@ def run_pytest(dir_name, dir_name_local, base_dir, args):
     else:
         print(colored(stdout, 'green'))
         print(colored(stderr, 'green'))
+
+    pytest_queue_str = ''
+    if stdout:
+        pytest_queue_str += stdout
+
+    if stderr:
+        pytest_queue_str += stderr
+
+    queues['pytest_output'].put(pytest_queue_str)
+
 
     if stderr:
         return False
@@ -677,8 +687,11 @@ def main(queues, args):
         # print the output in green.
         if output:
             print(colored(output, 'green'))
+            queues['script_command'].put(command_inside_docker)
+            queues['script_output'].put(output)
 
-        pytest_success = run_pytest(dir_name, dir_name_local, base_dir, args)
+
+        pytest_success = run_pytest(dir_name, dir_name_local, base_dir, args, queues)
 
         success = execution_success and pytest_success
         if success:
@@ -1082,6 +1095,9 @@ class InteractiveCodingApp(App):
 def create_queues():
     queues = {}
     queues['generated_code'] = Queue()
+    queues['pytest_output'] = Queue()
+    queues['script_output'] = Queue()
+    queues['script_command'] = Queue()
     queues['attempt'] = Queue()
     queues['input_prompt'] = Queue()
     queues['model'] = Queue()
