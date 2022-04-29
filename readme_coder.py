@@ -49,6 +49,8 @@ DUMMY_DIR = 'dummy/'
 DUMMY_DIR_LOCAL = os.path.join('mounted/', DUMMY_DIR)
 BASE_DIRS_DIR = 'base_dirs'
 
+SEPERATION_LINE = '============================================================'
+
 DOCKER_EXEC_COMMAND = 'docker exec readme_coder_container bash -c'
 
 PROMPT_BEGINNING = \
@@ -247,7 +249,8 @@ def clear_screen_and_display_generated_files_with_animation_backtracking(args, i
                 for e in completion:
                     # print(e, end='', flush=True)
                     completion_char_by_char += e
-                    generated_up_until_now = (text_all + completion_char_by_char).replace(input_prompt, '')
+                    main_file_name_str = f'**{args.main_file}:**'
+                    generated_up_until_now = main_file_name_str + (text_all + completion_char_by_char).replace(input_prompt, '')
                     queues['generated_code'].put(generated_up_until_now)
                     time.sleep(print_delay)
 
@@ -574,7 +577,7 @@ def generate_code_interactive():
         # os.makedirs(GENERATED_PROJECTS_DIR_LOCAL)
 
 
-def run_pytest(dir_name, dir_name_local, base_dir):
+def run_pytest(dir_name, dir_name_local, base_dir, args):
     # Copy all files from base_dir to dir_name that match the 'test*secret*' pattern
     # Check if pytest tests are present in the base_dir
     pytest_tests_present = False
@@ -595,6 +598,13 @@ def run_pytest(dir_name, dir_name_local, base_dir):
         os.system(f'cp -r {base_dir}/test*secret* {dir_name_local}')
     command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; pytest" '
     stdout, stderr, success = get_output(command_with_docker, args.timeout)
+    if not success:
+        print(colored(stdout, 'red'))
+        print(colored(stderr, 'red'))
+    else:
+        print(colored(stdout, 'green'))
+        print(colored(stderr, 'green'))
+
     if stderr:
         return False
     else:
@@ -668,7 +678,7 @@ def main(queues, args):
         if output:
             print(colored(output, 'green'))
 
-        pytest_success = run_pytest(dir_name, dir_name_local, base_dir)
+        pytest_success = run_pytest(dir_name, dir_name_local, base_dir, args)
 
         success = execution_success and pytest_success
         if success:
@@ -882,7 +892,7 @@ class Stats(Widget):
             attempt = queues['attempt'].get()
             self.last_attempt = attempt
         else:
-            attempt = self.last_attempt
+           attempt = self.last_attempt
 
         if not queues['model'].empty():
             model = queues['model'].get()
