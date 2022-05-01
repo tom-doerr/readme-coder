@@ -151,7 +151,7 @@ def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True,
     args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': stream, 'stop': stop, 'logprobs': 1}
     try:
         response = openai.Completion.create(**args)
-    except (openai.error.APIConnectionError, openai.error.nateLimitError) as e:
+    except (openai.error.APIConnectionError, openai.error.RateLimitError) as e:
         # print error colored
         print(colored(e, 'yellow'))
         time.sleep(2**attempt_num)
@@ -626,7 +626,7 @@ def fix_by_edit(generated_text, stderr, attempt_num=0):
     edit_instruction = f'Fix the following error:\n{stderr}\n'
     try:
         output = openai.Edit.create(engine='code-davinci-edit-001', input=generated_text, instruction=edit_instruction, temperature=0.5)
-    except (openai.error.APIConnectionError, openai.error.nateLimitError) as e:
+    except (openai.error.APIConnectionError, openai.error.RateLimitError) as e:
         print(colored(e, 'yellow'))
         time.sleep(2**attempt_num)
         return fix_by_edit(generated_text, stderr, attempt_num=attempt_num+1)
@@ -1136,6 +1136,7 @@ def create_queues():
     queues['input_prompt'] = Queue()
     queues['model'] = Queue()
     queues['text_generated_interactively'] = Queue()
+    queues['start_times'] = Queue()
     return queues
 
 
