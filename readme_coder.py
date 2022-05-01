@@ -151,7 +151,7 @@ def generate_completion(input_prompt, num_tokens, model, stop=None, stream=True,
     args = {'prompt': input_prompt, 'engine': model, 'temperature': 0.5, 'max_tokens': num_tokens, 'stream': stream, 'stop': stop, 'logprobs': 1}
     try:
         response = openai.Completion.create(**args)
-    except (openai.error.APIConnectionError, openai.error.RateLimitError) as e:
+    except (openai.error.APIConnectionError, openai.error.nateLimitError) as e:
         # print error colored
         print(colored(e, 'yellow'))
         time.sleep(2**attempt_num)
@@ -373,6 +373,7 @@ def get_args():
     parser.add_argument('-b', '--backtrack', action='store_true', help='Whether to backtrack or not')
     parser.add_argument('-i', '--interactive', action='store_true', help='Whether to run in interactive mode')
     parser.add_argument('-d', '--base_dir', type=str, default=None, help='Directory the generated project is based on')
+    parser.add_argument('-f', '--fix_by_edit', action='store_true', help='Whether to fix using the edit mode.')
     args = parser.parse_args()
     return args
 
@@ -621,6 +622,21 @@ def run_pytest(dir_name, dir_name_local, base_dir, args, queues):
         return True
 
 
+def fix_by_edit(generated_text, stderr, attempt_num=0):
+    edit_instruction = f'Fix the following error:\n{stderr}\n'
+    try:
+        output = openai.Edit.create(engine='code-davinci-edit-001', input=generated_text, instruction=edit_instruction, temperature=0.5)
+    except (openai.error.APIConnectionError, openai.error.nateLimitError) as e:
+        print(colored(e, 'yellow'))
+        time.sleep(2**attempt_num)
+        return fix_by_edit(generated_text, stderr, attempt_num=attempt_num+1)
+
+    output_text = output['choices'][0]['text']
+    print('----- inside fix_by_edit ------')
+    print("generated_text:", generated_text)
+    print("edit_instruction:", edit_instruction)
+    print("output_text:", output_text)
+    return output_text
 
 
 def main(queues, args):
@@ -633,13 +649,17 @@ def main(queues, args):
         # time.sleep(0.01)
 
     initialize_openai_api()
-    # engines = openai.Engine.list()
-    # print("engines:", engines)
+    if False:
+        engines = openai.Engine.list()
+        print("engines:", engines)
+
     input_prompt = create_input_prompt(args.main_file, base_dir)
     num_solutions = 0
     start_time = time.time()
     start_docker_container()
     generated_enough_solutions = False
+    generated_text = ''
+    fix_attempts = 0
     for attempt in range(1, args.num_attempts + 1):
         block_char = '─'
         print(f'{block_char * 30}', end='')
@@ -656,7 +676,13 @@ def main(queues, args):
 
 
         print_delay = 0.005 if 'code-davinci' in args.model else 0.001
-        generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay)
+        if args.fix_by_edit and generated_text and stderr:
+            print("fix_attempts:", fix_attempts)
+            generated_text = fix_by_edit(generated_text, stderr)
+            fix_attempts += 1
+        else:
+            generated_text = clear_screen_and_display_generated_files_with_animation_backtracking(args, input_prompt, queues, print_delay)
+            fix_attempts = 0
         if False:
             response = generate_completion(input_prompt, args.num_tokens, args.model)
             generated_text = clear_screen_and_display_generated_files_with_animation(response, print_delay)
@@ -667,7 +693,7 @@ def main(queues, args):
         command_with_docker = f'{DOCKER_EXEC_COMMAND} "cd /mounted/{dir_name}; {command_inside_docker}" '
 
         for _ in range(2):
-            output, stderr, execution_success = get_output(command_with_docker, args.timeout)
+            stdout, stderr, execution_success = get_output(command_with_docker, args.timeout)
             if not stderr or not 'ModuleNotFoundError' in stderr:
                 break
             
@@ -685,10 +711,18 @@ def main(queues, args):
             print(colored(stderr, 'red'))
             # os.system('cls' if os.name == 'nt' else 'clear')
         # print the output in green.
-        if output:
-            print(colored(output, 'green'))
-            queues['script_command'].put(command_inside_docker)
-            queues['script_output'].put(output)
+        if stdout:
+            print(colored(stdout, 'green'))
+
+        output = ''
+        if stdout:
+            output += stdout
+        if stderr:
+            output += stderr
+
+        queues['script_command'].put(command_inside_docker)
+        queues['script_output'].put(output)
+
 
 
         pytest_success = run_pytest(dir_name, dir_name_local, base_dir, args, queues)
@@ -696,20 +730,20 @@ def main(queues, args):
         success = execution_success and pytest_success
         if success:
             if args.output:
-                if output.strip() != args.output.strip():
+                if stdout.strip() != args.output.strip():
                     print(colored('Output doesn\'t match expected output', 'red'))
                     print(colored(f'Expected: {args.output.strip()}', 'red'))
-                    print(colored(f'Got: {output.strip()}', 'red'))
+                    print(colored(f'Got: {stdout.strip()}', 'red'))
                     continue
 
             # check if output is empty
-            if not output.strip():
+            if not stdout.strip():
                 print(colored('Output is empty', 'red'))
                 continue
 
             suc_id = generate_success_id()
             create_symlinks(suc_id, dir_name_local)
-            write_output_suc_id_file(output, suc_id)
+            write_output_suc_id_file(stdout, suc_id)
             num_solutions += 1
             if num_solutions >= args.num_solutions:
                 generated_enough_solutions = True
