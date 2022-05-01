@@ -191,7 +191,7 @@ class CodeView():
 
     def update_code_view(self, code):
         code_blocks_list = self.get_code_splits(code)
-        if self.last_num_code_blocks < len(code_blocks_list):
+        if len(code_blocks_list) < self.last_num_code_blocks:
             self.reset_code_view()
 
         self.last_num_code_blocks = len(code_blocks_list)
