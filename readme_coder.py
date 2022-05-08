@@ -754,10 +754,11 @@ def main(queues, args):
                     print(colored(f'Got: {stdout.strip()}', 'red'))
                     continue
 
-            # check if output is empty
-            if not stdout.strip():
-                print(colored('Output is empty', 'red'))
-                continue
+            if False:
+                # check if output is empty
+                if not stdout.strip():
+                    print(colored('Output is empty', 'red'))
+                    continue
 
             suc_id = generate_success_id()
             create_symlinks(suc_id, dir_name_local)
