@@ -127,6 +127,8 @@ def create_input_prompt(main_file, base_dir, length=3000, interactive=False):
     files.remove('README.md')
     files.append('README.md')
     for file in os.listdir(base_dir):
+        if file[-4:] in ['.png']:
+            continue
         input_prompt += f'\n============================================================\n**{file}:**\n\n'
         with open(os.path.join(base_dir, file), 'r') as f:
             input_prompt += f.read()
@@ -374,6 +376,7 @@ def get_args():
     parser.add_argument('-i', '--interactive', action='store_true', help='Whether to run in interactive mode')
     parser.add_argument('-d', '--base_dir', type=str, default=None, help='Directory the generated project is based on')
     parser.add_argument('-f', '--fix_by_edit', action='store_true', help='Whether to fix using the edit mode.')
+    parser.add_argument('--max_fix_attempts', type=int, default=5, help='The maximum number of attempts to fix the code')
     args = parser.parse_args()
     return args
 
@@ -640,6 +643,9 @@ def fix_by_edit(generated_text, stderr, attempt_num=0):
 
 
 def main(queues, args):
+    start_time = time.time()
+    queues['start_times'].put(start_time)
+
     move_old_symlinks()
     base_dir = get_base_dir(args.base_dir)
     # create_dirs_if_needed()
@@ -661,6 +667,18 @@ def main(queues, args):
     generated_text = ''
     fix_attempts = 0
     for attempt in range(1, args.num_attempts + 1):
+        if not queues['start_times'].empty():
+            length_of_the_queue = queues['start_times'].qsize()
+            print("length_of_the_queue:", length_of_the_queue)
+            start_time_other_process = queues['start_times'].get()
+            queues['start_times'].put(start_time_other_process)
+            print("start_time_other_process:", start_time_other_process)
+            print("start_time:", start_time)
+            print("start_time_other_process > start_time:", start_time_other_process > start_time)
+            if start_time_other_process > start_time:
+                print('Terminating the current process...')
+                sys.exit(0)
+
         block_char = '─'
         print(f'{block_char * 30}', end='')
         # print the attempt in bold
@@ -676,7 +694,7 @@ def main(queues, args):
 
 
         print_delay = 0.005 if 'code-davinci' in args.model else 0.001
-        if args.fix_by_edit and generated_text and stderr:
+        if args.fix_by_edit and generated_text and stderr and fix_attempts < args.max_fix_attempts:
             print("fix_attempts:", fix_attempts)
             generated_text = fix_by_edit(generated_text, stderr)
             fix_attempts += 1
@@ -1137,6 +1155,7 @@ def create_queues():
     queues['model'] = Queue()
     queues['text_generated_interactively'] = Queue()
     queues['start_times'] = Queue()
+    queues['main_process'] = Queue()
     return queues
 
 
